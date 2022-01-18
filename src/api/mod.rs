@@ -115,6 +115,14 @@ impl Server {
                             let v_string: Vec<String> = v.into_iter().map(|h|h.to_string()).collect();
                             respond_json!(req, v_string);
                         }
+                        "/blockchain/longest-chain-tx" => {
+                            // unimplemented!()
+                            respond_result!(req, false, "unimplemented!");
+                        }
+                        "/blockchain/longest-chain-tx-count" => {
+                            // unimplemented!()
+                            respond_result!(req, false, "unimplemented!");
+                        }
                         _ => {
                             let content_type =
                                 "Content-Type: application/json".parse::<Header>().unwrap();
