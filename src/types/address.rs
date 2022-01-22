@@ -54,10 +54,17 @@ impl std::fmt::Debug for Address {
 impl Address {
     // uses SHA256 (from ring crate) to hash the input bytes, and takes the last 20 bytes and convert them into a Address struct.
     pub fn from_public_key_bytes(bytes: &[u8]) -> Address {
-        // unimplemented!()
         let res = digest::digest(&digest::SHA256, bytes).as_ref().to_vec();
+        // Because SHA256 is 256 bits = 32 bytes, so 32-12 = 20 bytes
         let address: [u8; 20] = res[12..].try_into().unwrap();
         Address(address)
+    }
+
+    // Beacuse we need to generate random transcation by ourselves, and I faced a issue:
+    // "cannot initialize a tuple struct which contains private fields"
+    // "construct is not visible here due to private fields"
+    pub fn new(param: [u8; 20]) -> Address {
+        Address(param)
     }
 }
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
