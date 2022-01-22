@@ -1,4 +1,9 @@
-use serde::{Serialize, Deserialize};
+extern crate ring;
+
+use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
+// Add ring crate
+use ring::digest::{self, Context, Digest, SHA256};
 
 // 20-byte address
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]
@@ -47,8 +52,12 @@ impl std::fmt::Debug for Address {
 }
 
 impl Address {
+    // uses SHA256 (from ring crate) to hash the input bytes, and takes the last 20 bytes and convert them into a Address struct.
     pub fn from_public_key_bytes(bytes: &[u8]) -> Address {
-        unimplemented!()
+        // unimplemented!()
+        let res = digest::digest(&digest::SHA256, bytes).as_ref().to_vec();
+        let address: [u8; 20] = res[12..].try_into().unwrap();
+        Address(address)
     }
 }
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
