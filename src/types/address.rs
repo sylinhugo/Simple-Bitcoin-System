@@ -63,7 +63,7 @@ impl Address {
     // Beacuse we need to generate random transcation by ourselves, and I faced a issue:
     // "cannot initialize a tuple struct which contains private fields"
     // "construct is not visible here due to private fields"
-    pub fn new(param: [u8; 20]) -> Address {
+    pub fn new(param: [u8; 20]) -> Self {
         Address(param)
     }
 }
