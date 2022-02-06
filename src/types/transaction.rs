@@ -8,6 +8,7 @@ use ring::signature::{
 use serde::{Deserialize, Serialize};
 
 use super::address::Address;
+use super::hash::{Hashable, H256};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
@@ -17,7 +18,30 @@ pub struct Transaction {
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
-pub struct SignedTransaction {}
+pub struct SignedTransaction {
+    // ollow the definition in Midterm1 handout
+    public_key: Vec<u8>,
+    signature: Vec<u8>,
+    transcation: Transaction,
+}
+
+// According to Midterm1, impl Hashable for Transcation
+impl Hashable for Transaction {
+    fn hash(&self) -> H256 {
+        let serial_res = bincode::serialize(&self).unwrap();
+        let res: H256 = digest::digest(&digest::SHA256, serial_res.as_ref()).into();
+        res
+    }
+}
+
+// According to Midterm1, impl Hashable for SignedTranscation
+impl Hashable for SignedTransaction {
+    fn hash(&self) -> H256 {
+        let serial_res = bincode::serialize(&self).unwrap();
+        let res: H256 = digest::digest(&digest::SHA256, serial_res.as_ref()).into();
+        res
+    }
+}
 
 /// Create digital signature of a transaction
 pub fn sign(t: &Transaction, key: &Ed25519KeyPair) -> Signature {
