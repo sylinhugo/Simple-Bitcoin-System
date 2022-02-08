@@ -1,23 +1,12 @@
-use std::convert::TryInto;
-
-// Add more crates
-use ring::digest::{self, Context, Digest, SHA256};
-
 use super::hash::{Hashable, H256};
-
+use ring::digest::{self, Context, Digest, SHA256};
 /// A Merkle tree.
 #[derive(Debug, Default)]
 pub struct MerkleTree {
-    /*
-    every node is H256 structure, cause every node is hash
-    nodes = total node
-    leaf_nums = numbers of leaf
-    lavels[0] = number of leaf at level 0, levels[1] = number of leaf at level 1
-    levels.len() should be the height of merkletree
-     */
+    length: usize,
+    height: usize,
     nodes: Vec<H256>,
-    leaf_nums: usize,
-    levels: Vec<usize>,
+    root: H256,
 }
 
 impl MerkleTree {
@@ -25,164 +14,119 @@ impl MerkleTree {
     where
         T: Hashable,
     {
-        // unimplemented!()
-        let mut data_len = data.len();
-        let mut mkltree: Vec<H256> = Vec::new();
-        let mut level_num: Vec<usize> = Vec::new();
-
-        // for debugging
-        println!("\n--");
-        println!("Inside new");
-        println!("data_len is: {} ", data_len);
-
-        // finish this function in advanced, if data_len is zero
-        if data_len == 0 {
-            return MerkleTree {
-                nodes: mkltree,
-                leaf_nums: 0,
-                levels: level_num,
+        if data.is_empty() {
+            let merkel = MerkleTree {
+                length: 0,
+                height: 0,
+                nodes: Vec::new(),
+                root: H256::from([0; 32]),
             };
+            return merkel;
         }
 
-        for i in 0..data_len {
-            let digest_val = data[i].hash();
-            mkltree.push(digest_val);
-            println!("print digest_value: {}", digest_val);
-        }
+        // calculate the leaf, height of the merkle tree
+        let mut new_Vec = Vec::new();
+        let h = (data.len() as f64).log2().ceil() as u32;
+        let leaf_n = i32::pow(2, h) as usize;
+        let length = leaf_n;
 
-        // if leaf number is odd, we need to add one more leaf
-        // to make it become even
-        if data_len != 1 && data_len % 2 == 1 {
-            let leaf_last: H256 = mkltree[mkltree.len() - 1];
-            mkltree.push(leaf_last);
-            data_len += 1;
-        }
-        level_num.push(data_len);
-
-        let mut start = 0;
-        let mut tree_len = data_len;
-        let mut half = data_len / 2;
-        while half > 0 {
-            // flag imply whether next level will have odd node or not
-            let flag = half % 2;
-
-            for i in 0..half {
-                let mut context = Context::new(&SHA256);
-                context.update(mkltree[start + 2 * i].as_ref());
-                context.update(mkltree[start + 2 * i + 1].as_ref());
-                let res = context.finish();
-                mkltree.push(res.into());
+        // construct the leaf layer of the merkel tree
+        // last layer contains 2 ** h
+        let mut i: usize = 0;
+        while i < leaf_n {
+            if i < data.len() {
+                new_Vec.push(data[i].hash());
+            } else {
+                new_Vec.push(data[data.len() - 1].hash());
             }
-
-            // if amount of new generated nodes in next level is odd, we need to add one more to make it even
-            // After adding one more node, half should add one more
-            // if half=1, means we are at the top of mkltree
-            if flag == 1 && half != 1 {
-                let last_elem = mkltree[mkltree.len() - 1];
-                mkltree.push(last_elem);
-                half += 1;
-            }
-
-            start += tree_len;
-            tree_len = half;
-            half /= 2;
-            level_num.push(tree_len);
+            i = i + 1;
         }
 
-        // for debugging
-        println!(
-            "mlktree.len() is {} and data_len is {} and level_num is {} and {} {}",
-            mkltree.len(),
-            data_len,
-            level_num.len(),
-            level_num[0],
-            level_num[1],
-        );
-        println!("mlktree is {} {} {}", mkltree[0], mkltree[1], mkltree[2]);
+        let height = h + 1;
+        let total_num = (i32::pow(2, height) - 1) as usize;
+        let mut nodes = vec![new_Vec[0]; total_num];
 
+        let mut node_idx = total_num - new_Vec.len();
+        let mut data_idx = 0;
+
+        // load the leaf layer if the merkle in nodes
+        while node_idx < total_num && data_idx < new_Vec.len() {
+            nodes[node_idx] = new_Vec[data_idx];
+            node_idx += 1;
+            data_idx += 1;
+        }
+
+        let mut cur = (total_num - new_Vec.len() - 1) as i32;
+        while cur >= 0 {
+            let left_child = nodes[(cur as usize) * 2 + 1].as_ref();
+            let right_child = nodes[(cur as usize) * 2 + 2].as_ref();
+
+            let mut context = Context::new(&SHA256);
+            context.update(&left_child[..]);
+            context.update(&right_child[..]);
+            let buffer_hash = context.finish();
+            let parent = H256::from(buffer_hash);
+            nodes[cur as usize] = parent;
+            cur -= 1;
+        }
+
+        let root = nodes[0];
         MerkleTree {
-            nodes: mkltree,
-            leaf_nums: data_len,
-            levels: level_num,
+            length: length,
+            height: height as usize,
+            nodes: nodes,
+            root: root,
         }
     }
 
     pub fn root(&self) -> H256 {
-        // for debugging
-        println!("\n--");
-        println!("Inside root");
-        println!(
-            "The digest of root is: {}",
-            self.nodes[self.nodes.len() - 1]
-        );
-
-        return self.nodes[self.nodes.len() - 1];
+        return self.root;
     }
 
     /// Returns the Merkle Proof of data at index i
-    /// The index start from zero
     pub fn proof(&self, index: usize) -> Vec<H256> {
-        let mut proof_res: Vec<H256> = Vec::new();
-        let mut height = self.levels.len();
-        let mut start = 0;
-        let mut level = 0;
-        let mut idx = index;
-
-        // for debugging
-        println!("\n--");
-        println!("Inside proof");
-        println!("The idx number is:");
-        println!("{}", idx);
-
-        while height > 1 {
-            if idx % 2 == 0 {
-                // for debugging
-                println!("Inside idx % 2 == 0");
-                println!("push: {}", self.nodes[start + idx + 1]);
-
-                proof_res.push(self.nodes[start + idx + 1]);
+        let mut real_idx = index + self.nodes.len() - self.length;
+        let mut res_p: Vec<H256> = Vec::new();
+        let mut level = 1;
+        while level < self.height {
+            if real_idx % 2 == 0 {
+                res_p.push(self.nodes[real_idx - 1]);
             } else {
-                // for debugging
-                println!("Inside idx % 2 == 1");
-                println!("push: {}", self.nodes[start + idx - 1]);
-
-                proof_res.push(self.nodes[start + idx - 1]);
+                res_p.push(self.nodes[real_idx + 1]);
             }
-            start += self.levels[level];
+            real_idx = (real_idx - 1) / 2;
             level += 1;
-            height -= 1;
-            idx /= 2;
         }
-
-        proof_res
+        res_p
     }
 }
 
 /// Verify that the datum hash with a vector of proofs will produce the Merkle root. Also need the
 /// index of datum and `leaf_size`, the total number of leaves.
 pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size: usize) -> bool {
-    let mut digests = *datum;
-
-    // for debugging
-    println!("\n--");
-    println!("Inside verify");
-    println!(
-        "root is {} and datum is {} and proof is {:?} and index is {} and leaf_size is {}",
-        root, datum, proof, index, leaf_size
-    );
-
-    for i in 0..proof.len() {
+    let mut my_root = *datum;
+    let h = (leaf_size as f64).log2().ceil() as u32;
+    let node_n = (i32::pow(2, h + 1) - 1) as usize;
+    let mut converted_index = index + node_n - leaf_size;
+    let mut cur = 0;
+    while cur < proof.len() {
         let mut context = Context::new(&SHA256);
-        context.update(digests.as_ref());
-        context.update(proof[i].as_ref());
-        let res = context.finish();
-        digests = res.into();
+        if converted_index % 2 == 0 {
+            // context.update(&<[u8; 32]>::from(proof[count]));
+            // context.update(&<[u8; 32]>::from(val));
+            context.update(proof[cur].as_ref());
+            context.update(my_root.as_ref());
+        } else {
+            // context.update(&<[u8; 32]>::from(val));
+            // context.update(&<[u8; 32]>::from(proof[count]));
+            context.update(my_root.as_ref());
+            context.update(proof[cur].as_ref());
+        }
+        my_root = H256::from(context.finish());
+        cur += 1;
+        converted_index = (converted_index - 1) / 2;
     }
-
-    // for debugging
-    println!("digests in verify is {}", digests);
-
-    digests == *root
+    return my_root == *root;
 }
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
 
