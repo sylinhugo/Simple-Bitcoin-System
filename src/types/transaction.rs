@@ -14,7 +14,7 @@ use super::hash::{Hashable, H256};
 pub struct Transaction {
     sender: Address,
     receiver: Address,
-    value: u8,
+    value: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -26,13 +26,13 @@ pub struct SignedTransaction {
 }
 
 // According to Midterm1, impl Hashable for Transcation
-impl Hashable for Transaction {
-    fn hash(&self) -> H256 {
-        let serial_res = bincode::serialize(&self).unwrap();
-        let res: H256 = digest::digest(&digest::SHA256, serial_res.as_ref()).into();
-        res
-    }
-}
+// impl Hashable for Transaction {
+//     fn hash(&self) -> H256 {
+//         let serial_res = bincode::serialize(&self).unwrap();
+//         let res: H256 = digest::digest(&digest::SHA256, serial_res.as_ref()).into();
+//         res
+//     }
+// }
 
 // According to Midterm1, impl Hashable for SignedTranscation
 impl Hashable for SignedTransaction {
