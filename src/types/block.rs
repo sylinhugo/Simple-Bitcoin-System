@@ -1,5 +1,6 @@
 use super::transaction::SignedTransaction;
 use crate::types::hash::{Hashable, H256};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 // According to midterm1, add Block, BlockHeader and BlockContent
@@ -13,7 +14,7 @@ pub struct BlockHeader {
     pub parent: H256,
     pub nonce: u32,
     pub difficulty: H256,
-    pub timestamp: u128,
+    pub timestamp: i64,
     pub merkle_root: H256,
 }
 
@@ -55,12 +56,9 @@ impl Block {
 
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_block(parent: &H256) -> Block {
-    use crate::types::{
-        merkle::MerkleTree,
-        transaction::{generate_random_transaction, SignedTransaction, Transaction},
-    };
+    use crate::types::merkle::MerkleTree;
     use rand::Rng;
-    use std::{convert::TryInto, time::SystemTime};
+    use std::convert::TryInto;
 
     let mut rng = rand::thread_rng();
     // Generate random nonce
@@ -75,13 +73,10 @@ pub fn generate_random_block(parent: &H256) -> Block {
     let block_difficulty: H256 = tmp_difficulty.into();
 
     // Assign current system timestamp to block
-    let block_timestamp: u128 = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+    let block_timestamp: i64 = Utc::now().timestamp();
 
     // Generate fake transcation for testing
-    let fake_content: Vec<SignedTransaction> = Vec::<SignedTransaction>::new();
+    let fake_content: Vec<SignedTransaction> = Vec::new();
 
     // Generate merkle tree with fake content
     let merkle_tree: MerkleTree = MerkleTree::new(&fake_content);
