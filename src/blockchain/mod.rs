@@ -1,18 +1,18 @@
-use crate::types::block::{Block, BlockHeader, BlockContent};
-use crate::types::hash::{H256, Hashable};
-use crate::types::transaction::SignedTransaction;
+use crate::types::block::{Block, BlockContent, BlockHeader};
+use crate::types::hash::{Hashable, H256};
 use crate::types::merkle::MerkleTree;
 use std::collections::HashMap;
+
 pub struct Blockchain {
-    pub tip: H256,
+    pub tip: H256,                    // tip is the last block's hash in the longest chain
     pub blocks: HashMap<H256, Block>, // mapping hashing of block and the block
-    pub lengths: HashMap<H256, i32>,  // mapping hashing of block and its length index
+    pub lengths: HashMap<H256, u32>,  // mapping hashing of block and its length index
 }
 
 impl Blockchain {
     /// Create a new blockchain, only containing the genesis block
     pub fn new() -> Self {
-        // generate elements of a new block
+        // generate elements for a new block
         let parent: H256 = [0u8; 32].into();
 
         let nonce = 0u32;
@@ -21,56 +21,63 @@ impl Blockchain {
         _difficulty[0] = 16u8;
         let difficulty: H256 = _difficulty.into();
 
-        let timestamp: u128 = 0u128;
+        let timestamp = 0i64;
 
-        let transactions = Vec::<SignedTransaction>::new();
-
+        let transactions = Vec::new();
         let merkle_tree = MerkleTree::new(&transactions);
         let merkle_root = merkle_tree.root();
-        
-        // assemble block
 
-        let header = BlockHeader{parent, nonce, difficulty, timestamp, merkle_root};
-        let content = BlockContent{content: Vec::new()};
-        let block = Block{header, content};
+        // assemble block
+        let header = BlockHeader {
+            parent,
+            nonce,
+            difficulty,
+            timestamp,
+            merkle_root,
+        };
+        let content = BlockContent {
+            content: transactions,
+        };
+        let new_block = Block { header, content };
+        let _hash = new_block.hash();
 
         // two hashmap store blocks and lengths
         let mut _blocks = HashMap::new();
         let mut _lengths = HashMap::new();
 
-        let h = block.hash();
-        _blocks.insert(h, block.clone());
-        _lengths.insert(h, 0);
+        _blocks.insert(_hash, new_block);
+        _lengths.insert(_hash, 0);
 
-        return Blockchain{
-            tip: h,
+        Self {
+            tip: _hash,
             blocks: _blocks,
             lengths: _lengths,
-        };
-
+        }
     }
 
     /// Insert a block into blockchain
     pub fn insert(&mut self, block: &Block) {
+        let block_hash = block.hash();
+        let new_block = block.clone();
 
-        let h = block.hash();
-        // hash collision, return in advance
-        if self.blocks.contains_key(&h){
+        // Hash collision, return in advance
+        if self.blocks.contains_key(&block_hash) {
             return;
         }
-        // parent of current block
-        let curparent = block.header.parent;
 
-        // update the length index of new block according to its parent
-        self.lengths.insert(h, self.lengths[&curparent] + 1);
+        // Parent of current block
+        let cur_parent = block.header.parent;
 
-        // add the cloned block into blocks map
-        let new_block = block.clone();
-        self.blocks.insert(h, new_block);
+        // Add the cloned block into blocks map
+        self.blocks.insert(block_hash, new_block);
 
-        //update the tip accroding to longest sub-chain
-        if self.lengths[&h] > self.lengths[&self.tip]{
-            self.tip = h;
+        // Update the length index of new block according to its parent
+        self.lengths
+            .insert(block_hash, self.lengths[&cur_parent] + 1);
+
+        // Update the tip accroding to longest sub-chain
+        if self.lengths[&block_hash] > self.lengths[&self.tip] {
+            self.tip = block_hash;
         }
     }
 
@@ -79,14 +86,13 @@ impl Blockchain {
         return self.tip;
     }
 
-    
     /// Get all blocks' hashes of the longest chain, ordered from genesis to the tip
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
-        // unimplemented!()
         let mut res = Vec::new();
 
-        // curBlock points to the tip
+        // Current block points to the tip
         let mut cur = self.tip();
+
         let len = self.lengths[&cur];
         let mut i = 0;
         while i < len {
@@ -96,13 +102,9 @@ impl Blockchain {
             cur = block.header.parent;
             i += 1;
         }
-        
         res.reverse();
         res
-    
     }
-
-    
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
@@ -120,7 +122,6 @@ mod tests {
         let block = generate_random_block(&genesis_hash);
         blockchain.insert(&block);
         assert_eq!(blockchain.tip(), block.hash());
-
     }
 }
 
