@@ -21,7 +21,7 @@ impl Blockchain {
         _difficulty[0] = 16u8;
         let difficulty: H256 = _difficulty.into();
 
-        let timestamp = 0i64;
+        let timestamp = 0u128;
 
         let transactions = Vec::new();
         let merkle_tree = MerkleTree::new(&transactions);
