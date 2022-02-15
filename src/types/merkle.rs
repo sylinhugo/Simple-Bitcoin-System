@@ -31,11 +31,11 @@ impl MerkleTree {
         let mut level_num: Vec<usize> = Vec::new();
 
         // for debugging
-        println!("\n--");
-        println!("Inside new");
-        println!("data_len is: {} ", data_len);
+        // println!("\n--");
+        // println!("Inside new");
+        // println!("data_len is: {} ", data_len);
 
-        // finish this function in advanced, if data_len is zero
+        // Finish this function in advanced, if data_len is zero
         // 2022/02/13 update, I didn't consider corner case before,
         // if input is 0, we should pad one element into it,
         // so the only node in merkle tree is root
@@ -52,7 +52,7 @@ impl MerkleTree {
         for i in 0..data_len {
             let digest_val = data[i].hash();
             mkltree.push(digest_val);
-            println!("print digest_value: {}", digest_val);
+            // println!("print digest_value: {}", digest_val);
         }
 
         // if leaf number is odd, we need to add one more leaf
@@ -95,15 +95,15 @@ impl MerkleTree {
         }
 
         // for debugging
-        println!(
-            "mlktree.len() is {} and data_len is {} and level_num is {} and {} {}",
-            mkltree.len(),
-            data_len,
-            level_num.len(),
-            level_num[0],
-            level_num[1],
-        );
-        println!("mlktree is {} {} {}", mkltree[0], mkltree[1], mkltree[2]);
+        // println!(
+        //     "mlktree.len() is {} and data_len is {} and level_num is {} and {} {}",
+        //     mkltree.len(),
+        //     data_len,
+        //     level_num.len(),
+        //     level_num[0],
+        //     level_num[1],
+        // );
+        // println!("mlktree is {} {} {}", mkltree[0], mkltree[1], mkltree[2]);
 
         MerkleTree {
             nodes: mkltree,
@@ -114,12 +114,12 @@ impl MerkleTree {
 
     pub fn root(&self) -> H256 {
         // for debugging
-        println!("\n--");
-        println!("Inside root");
-        println!(
-            "The digest of root is: {}",
-            self.nodes[self.nodes.len() - 1]
-        );
+        // println!("\n--");
+        // println!("Inside root");
+        // println!(
+        //     "The digest of root is: {}",
+        //     self.nodes[self.nodes.len() - 1]
+        // );
 
         return self.nodes[self.nodes.len() - 1];
     }
@@ -134,22 +134,22 @@ impl MerkleTree {
         let mut idx = index;
 
         // for debugging
-        println!("\n--");
-        println!("Inside proof");
-        println!("The idx number is:");
-        println!("{}", idx);
+        // println!("\n--");
+        // println!("Inside proof");
+        // println!("The idx number is:");
+        // println!("{}", idx);
 
         while height > 1 {
             if idx % 2 == 0 {
                 // for debugging
-                println!("Inside idx % 2 == 0");
-                println!("push: {}", self.nodes[start + idx + 1]);
+                // println!("Inside idx % 2 == 0");
+                // println!("push: {}", self.nodes[start + idx + 1]);
 
                 proof_res.push(self.nodes[start + idx + 1]);
             } else {
                 // for debugging
-                println!("Inside idx % 2 == 1");
-                println!("push: {}", self.nodes[start + idx - 1]);
+                // println!("Inside idx % 2 == 1");
+                // println!("push: {}", self.nodes[start + idx - 1]);
 
                 proof_res.push(self.nodes[start + idx - 1]);
             }
@@ -169,12 +169,12 @@ pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size
     let mut digests = *datum;
 
     // for debugging
-    println!("\n--");
-    println!("Inside verify");
-    println!(
-        "root is {} and datum is {} and proof is {:?} and index is {} and leaf_size is {}",
-        root, datum, proof, index, leaf_size
-    );
+    // println!("\n--");
+    // println!("Inside verify");
+    // println!(
+    //     "root is {} and datum is {} and proof is {:?} and index is {} and leaf_size is {}",
+    //     root, datum, proof, index, leaf_size
+    // );
 
     for i in 0..proof.len() {
         let mut context = Context::new(&SHA256);
@@ -185,7 +185,7 @@ pub fn verify(root: &H256, datum: &H256, proof: &[H256], index: usize, leaf_size
     }
 
     // for debugging
-    println!("digests in verify is {}", digests);
+    // println!("digests in verify is {}", digests);
 
     digests == *root
 }
