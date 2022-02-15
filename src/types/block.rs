@@ -1,7 +1,7 @@
 use super::transaction::SignedTransaction;
 use crate::types::hash::{Hashable, H256};
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // According to midterm1, add Block, BlockHeader and BlockContent
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -14,7 +14,7 @@ pub struct BlockHeader {
     pub parent: H256,
     pub nonce: u32,
     pub difficulty: H256,
-    pub timestamp: i64,
+    pub timestamp: u128,
     pub merkle_root: H256,
 }
 
@@ -73,7 +73,10 @@ pub fn generate_random_block(parent: &H256) -> Block {
     let block_difficulty: H256 = tmp_difficulty.into();
 
     // Assign current system timestamp to block
-    let block_timestamp: i64 = Utc::now().timestamp();
+    let block_timestamp: u128 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_millis();
 
     // Generate fake transcation for testing
     let fake_content: Vec<SignedTransaction> = Vec::new();
