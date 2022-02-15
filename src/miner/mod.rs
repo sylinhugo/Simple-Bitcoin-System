@@ -3,15 +3,27 @@ pub mod worker;
 use log::info;
 
 use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
+use rand::Rng;
+use smol::unblock;
 use std::time;
 
 use std::thread;
 
+use crate::blockchain;
+use crate::blockchain::Blockchain;
 use crate::types::block::Block;
+use crate::types::block::BlockContent;
+use crate::types::block::BlockHeader;
+use crate::types::hash::Hashable;
+use crate::types::hash::H256;
+use crate::types::merkle::MerkleTree;
+use crate::types::transaction::SignedTransaction;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 enum ControlSignal {
     Start(u64), // the number controls the lambda of interval between block generation
-    Update, // update the block in mining, it may due to new blockchain tip or new transaction
+    Update,     // update the block in mining, it may due to new blockchain tip or new transaction
     Exit,
 }
 
@@ -26,6 +38,8 @@ pub struct Context {
     control_chan: Receiver<ControlSignal>,
     operating_state: OperatingState,
     finished_block_chan: Sender<Block>,
+    blockchain: Arc<Mutex<Blockchain>>, // midterm2, according to document, implement this type
+    tip: H256, // midterm2, the reason why add this part is from the discusssion on piazza
 }
 
 #[derive(Clone)]
@@ -34,7 +48,7 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new() -> (Context, Handle, Receiver<Block>) {
+pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Block>) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
 
@@ -42,6 +56,8 @@ pub fn new() -> (Context, Handle, Receiver<Block>) {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
+        blockchain: Arc::clone(blockchain),    // midterm2 added
+        tip: blockchain.lock().unwrap().tip(), // midterm2 added
     };
 
     let handle = Handle {
@@ -51,9 +67,12 @@ pub fn new() -> (Context, Handle, Receiver<Block>) {
     (ctx, handle, finished_block_receiver)
 }
 
-#[cfg(any(test,test_utilities))]
+// According to midterm project2
+#[cfg(any(test, test_utilities))]
 fn test_new() -> (Context, Handle, Receiver<Block>) {
-    new()
+    let fake_blockchain = Blockchain::new();
+    let blockchain = Arc::new(Mutex::new(fake_blockchain));
+    new(&blockchain)
 }
 
 impl Handle {
@@ -85,6 +104,13 @@ impl Context {
 
     fn miner_loop(&mut self) {
         // main mining loop
+
+        // Midterm2, uncomment this, although it would pass the test case
+        // Maybe will use it in the future
+        // let blockchain = self.blockchain.lock().unwrap();
+        // let mut block_parent = blockchain.tip();
+        // let block_difficulty = [255u8; 32].into();   // Source: GitLab instructions
+
         loop {
             // check and react to control signals
             match self.operating_state {
@@ -133,7 +159,49 @@ impl Context {
             }
 
             // TODO for student: actual mining, create a block
-            // TODO for student: if block mining finished, you can have something like: self.finished_block_chan.send(block.clone()).expect("Send finished block error");
+            // TODO for student: if block mining finished, you can have something like:
+            // self.finished_block_chan.send(block.clone()).expect("Send finished block error");
+
+            let blockchain = self.blockchain.lock().unwrap();
+            // let mut block_parent = blockchain2.tip();    // Uncomment this, due to test case error
+            let block_parent = self.tip;
+
+            let mut rng = rand::thread_rng();
+            let block_nonce: u32 = rng.gen();
+            // let block_difficulty = blockchain.blocks[&block_parent].header.difficulty;
+            let block_difficulty = [255u8; 32].into();
+
+            let block_timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
+
+            let fake_transcation: Vec<SignedTransaction> = Vec::new();
+            let merklt_tree = MerkleTree::new(&fake_transcation);
+
+            let block_header = BlockHeader {
+                parent: block_parent,
+                nonce: block_nonce,
+                difficulty: block_difficulty,
+                timestamp: block_timestamp,
+                merkle_root: merklt_tree.root(),
+            };
+            let block_content = BlockContent {
+                content: fake_transcation,
+            };
+            let new_block = Block {
+                header: block_header,
+                content: block_content,
+            };
+
+            if new_block.hash() <= block_difficulty {
+                self.finished_block_chan
+                    .send(new_block.clone())
+                    .expect("Send finished block error");
+
+                // block_parent = new_block.hash();     // this will not work, failed to pass miner_three_block() case
+                self.tip = new_block.hash();
+            }
 
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {
@@ -149,8 +217,8 @@ impl Context {
 
 #[cfg(test)]
 mod test {
-    use ntest::timeout;
     use crate::types::hash::Hashable;
+    use ntest::timeout;
 
     #[test]
     #[timeout(60000)]
