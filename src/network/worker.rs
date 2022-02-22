@@ -1,10 +1,14 @@
 use super::message::Message;
 use super::peer;
 use super::server::Handle as ServerHandle;
-use crate::types::hash::H256;
+use crate::blockchain::Blockchain;
+use crate::types::block::Block;
+use crate::types::hash::{Hashable, H256};
+use std::collections::HashMap;
 
+use futures::executor::block_on;
 use log::{debug, error, warn};
-
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 #[cfg(any(test, test_utilities))]
@@ -16,6 +20,8 @@ pub struct Worker {
     msg_chan: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
     num_worker: usize,
     server: ServerHandle,
+    blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
+    buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
 }
 
 impl Worker {
@@ -23,11 +29,15 @@ impl Worker {
         num_worker: usize,
         msg_src: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
         server: &ServerHandle,
+        blockchain: &Arc<Mutex<Blockchain>>,
+        buffer: &Arc<Mutex<HashMap<H256, Block>>>,
     ) -> Self {
         Self {
             msg_chan: msg_src,
             num_worker,
             server: server.clone(),
+            blockchain: Arc::clone(blockchain),
+            buffer: Arc::clone(buffer),
         }
     }
 
@@ -52,6 +62,11 @@ impl Worker {
             let msg = result.unwrap();
             let (msg, mut peer) = msg;
             let msg: Message = bincode::deserialize(&msg).unwrap();
+
+            // I think it world be better to initialize lock type variables in advanced
+            let mut locked_blockchian = self.blockchain.lock().unwrap();
+            let mut locked_bffer = self.buffer.lock().unwrap();
+
             match msg {
                 Message::Ping(nonce) => {
                     debug!("Ping: {}", nonce);
@@ -60,7 +75,64 @@ impl Worker {
                 Message::Pong(nonce) => {
                     debug!("Pong: {}", nonce);
                 }
-                _ => unimplemented!(),
+                Message::NewBlockHashes(hashes) => {
+                    let mut new_blocks: Vec<H256> = Vec::new();
+
+                    for hash in hashes {
+                        if !locked_blockchian.blocks.contains_key(&hash) {
+                            new_blocks.push(hash);
+                        }
+                    }
+                    if new_blocks.len() > 0 {
+                        peer.write(Message::GetBlocks(new_blocks.clone()));
+                    }
+                }
+                Message::GetBlocks(hashes) => {
+                    let mut new_blocks = Vec::new();
+
+                    for hash in hashes {
+                        if locked_blockchian.blocks.contains_key(&hash) {
+                            new_blocks.push(locked_blockchian.blocks[&hash].clone());
+                        }
+                    }
+                    if new_blocks.len() > 0 {
+                        peer.write(Message::Blocks(new_blocks));
+                    }
+                }
+                Message::Blocks(blocks) => {
+                    let mut new_blocks: Vec<H256> = Vec::new();
+                    let mut buffer_parents: Vec<H256> = Vec::new();
+
+                    for block in blocks.iter() {
+                        // If the block isn't inside blockchain, then we can try to insert it
+                        // Or, we just pass it
+                        if !(locked_blockchian.blocks.contains_key(&block.hash())) {
+                            // If block's parent isn't inside the blockchain,
+                            // then we need to wait until block's parent be added in.
+                            if locked_blockchian.blocks.contains_key(&block.header.parent) {
+                                locked_blockchian.insert(block);
+                                new_blocks.push(block.hash());
+                            } else {
+                                locked_bffer.insert(block.header.parent, block.clone());
+                                buffer_parents.push(block.header.parent.clone());
+                                peer.write(Message::GetBlocks(buffer_parents.clone()));
+                            }
+                        }
+                    }
+                    if new_blocks.len() > 0 {
+                        self.server
+                            .broadcast(Message::NewBlockHashes(new_blocks.clone()));
+                    }
+                }
+                Message::NewTransactionHashes(hashes) => {
+                    unimplemented!();
+                }
+                Message::GetTransactions(hashes) => {
+                    unimplemented!();
+                }
+                Message::Transactions(transactions) => {
+                    unimplemented!();
+                }
             }
         }
     }
@@ -92,9 +164,22 @@ impl TestMsgSender {
 fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H256>) {
     let (server, server_receiver) = ServerHandle::new_for_test();
     let (test_msg_sender, msg_chan) = TestMsgSender::new();
-    let worker = Worker::new(1, msg_chan, &server);
+
+    let fake_blockchain = Blockchain::new();
+    let blockchain = Arc::new(Mutex::new(fake_blockchain));
+    let fake_buffer = HashMap::new();
+    let buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_buffer));
+
+    let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer);
     worker.start();
-    (test_msg_sender, server_receiver, vec![])
+
+    let mut res: Vec<H256> = Vec::new();
+    let locked_blockchain = blockchain.lock().unwrap();
+    for (_hash, _block) in locked_blockchain.blocks.iter() {
+        res.push(*_hash);
+    }
+
+    (test_msg_sender, server_receiver, res)
 }
 
 // DO NOT CHANGE THIS COMMENT, IT IS FOR AUTOGRADER. BEFORE TEST
