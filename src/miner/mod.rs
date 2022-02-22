@@ -1,15 +1,11 @@
 pub mod worker;
 
-use log::info;
-
 use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
+use log::info;
 use rand::Rng;
-use smol::unblock;
+use std::thread;
 use std::time;
 
-use std::thread;
-
-use crate::blockchain;
 use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::block::BlockContent;
