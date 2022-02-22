@@ -13,6 +13,7 @@ use blockchain::Blockchain;
 use clap::clap_app;
 use log::{error, info};
 use smol::channel;
+use std::collections::HashMap;
 use std::net;
 use std::process;
 use std::sync::{Arc, Mutex};
@@ -37,6 +38,10 @@ fn main() {
     stderrlog::new().verbosity(verbosity).init().unwrap();
     let blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(blockchain));
+
+    // proj3 added
+    let buffer = Arc::new(Mutex::new(HashMap::new()));
+
     // parse p2p server address
     let p2p_addr = matches
         .value_of("peer_addr")
@@ -76,7 +81,8 @@ fn main() {
             error!("Error parsing P2P workers: {}", e);
             process::exit(1);
         });
-    let worker_ctx = network::worker::Worker::new(p2p_workers, msg_rx, &server);
+    let worker_ctx =
+        network::worker::Worker::new(p2p_workers, msg_rx, &server, &blockchain, &buffer);
     worker_ctx.start();
 
     // ------------------------
