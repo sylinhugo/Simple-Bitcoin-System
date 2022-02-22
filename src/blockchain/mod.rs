@@ -60,7 +60,7 @@ impl Blockchain {
         let block_hash = block.hash();
         let new_block = block.clone();
 
-        // Hash collision, return in advance
+        // Hash collision, return in advanced
         if self.blocks.contains_key(&block_hash) {
             return;
         }
