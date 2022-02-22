@@ -3,13 +3,13 @@ use super::peer;
 use super::server::Handle as ServerHandle;
 use crate::types::hash::H256;
 
-use log::{debug, warn, error};
+use log::{debug, error, warn};
 
 use std::thread;
 
-#[cfg(any(test,test_utilities))]
+#[cfg(any(test, test_utilities))]
 use super::peer::TestReceiver as PeerTestReceiver;
-#[cfg(any(test,test_utilities))]
+#[cfg(any(test, test_utilities))]
 use super::server::TestReceiver as ServerTestReceiver;
 #[derive(Clone)]
 pub struct Worker {
@@ -17,7 +17,6 @@ pub struct Worker {
     num_worker: usize,
     server: ServerHandle,
 }
-
 
 impl Worker {
     pub fn new(
@@ -67,15 +66,18 @@ impl Worker {
     }
 }
 
-#[cfg(any(test,test_utilities))]
+#[cfg(any(test, test_utilities))]
 struct TestMsgSender {
-    s: smol::channel::Sender<(Vec<u8>, peer::Handle)>
+    s: smol::channel::Sender<(Vec<u8>, peer::Handle)>,
 }
-#[cfg(any(test,test_utilities))]
+#[cfg(any(test, test_utilities))]
 impl TestMsgSender {
-    fn new() -> (TestMsgSender, smol::channel::Receiver<(Vec<u8>, peer::Handle)>) {
-        let (s,r) = smol::channel::unbounded();
-        (TestMsgSender {s}, r)
+    fn new() -> (
+        TestMsgSender,
+        smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
+    ) {
+        let (s, r) = smol::channel::unbounded();
+        (TestMsgSender { s }, r)
     }
 
     fn send(&self, msg: Message) -> PeerTestReceiver {
@@ -85,13 +87,13 @@ impl TestMsgSender {
         r
     }
 }
-#[cfg(any(test,test_utilities))]
+#[cfg(any(test, test_utilities))]
 /// returns two structs used by tests, and an ordered vector of hashes of all blocks in the blockchain
 fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H256>) {
     let (server, server_receiver) = ServerHandle::new_for_test();
     let (test_msg_sender, msg_chan) = TestMsgSender::new();
     let worker = Worker::new(1, msg_chan, &server);
-    worker.start(); 
+    worker.start();
     (test_msg_sender, server_receiver, vec![])
 }
 
@@ -99,9 +101,9 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
 
 #[cfg(test)]
 mod test {
-    use ntest::timeout;
     use crate::types::block::generate_random_block;
     use crate::types::hash::Hashable;
+    use ntest::timeout;
 
     use super::super::message::Message;
     use super::generate_test_worker_and_start;
@@ -111,7 +113,8 @@ mod test {
     fn reply_new_block_hashes() {
         let (test_msg_sender, _server_receiver, v) = generate_test_worker_and_start();
         let random_block = generate_random_block(v.last().unwrap());
-        let mut peer_receiver = test_msg_sender.send(Message::NewBlockHashes(vec![random_block.hash()]));
+        let mut peer_receiver =
+            test_msg_sender.send(Message::NewBlockHashes(vec![random_block.hash()]));
         let reply = peer_receiver.recv();
         if let Message::GetBlocks(v) = reply {
             assert_eq!(v, vec![random_block.hash()]);
