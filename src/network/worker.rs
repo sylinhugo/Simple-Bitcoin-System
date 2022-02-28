@@ -22,6 +22,8 @@ pub struct Worker {
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
     buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
+    orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>
+
 }
 
 impl Worker {
@@ -31,6 +33,7 @@ impl Worker {
         server: &ServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>,
         buffer: &Arc<Mutex<HashMap<H256, Block>>>,
+        orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>, 
     ) -> Self {
         Self {
             msg_chan: msg_src,
@@ -38,6 +41,7 @@ impl Worker {
             server: server.clone(),
             blockchain: Arc::clone(blockchain),
             buffer: Arc::clone(buffer),
+            orphan_buffer: Arc::clone(orphan_buffer),
         }
     }
 
@@ -66,6 +70,7 @@ impl Worker {
             // I think it world be better to initialize lock type variables in advanced
             let mut locked_blockchian = self.blockchain.lock().unwrap();
             let mut locked_bffer = self.buffer.lock().unwrap();
+            let mut locked_orphan_buffer = self.orphan_buffer.lock().unwrap();
 
             match msg {
                 Message::Ping(nonce) => {
@@ -169,8 +174,9 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
     let blockchain = Arc::new(Mutex::new(fake_blockchain));
     let fake_buffer = HashMap::new();
     let buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_buffer));
-
-    let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer);
+    let fake_orphan_buffer = HashMap::new();
+    let orphan_buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_orphan_buffer));
+    let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer, &orphan_buffer);
     worker.start();
 
     let mut res: Vec<H256> = Vec::new();
