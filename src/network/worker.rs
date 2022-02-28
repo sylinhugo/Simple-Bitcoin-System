@@ -7,6 +7,7 @@ use crate::types::hash::{Hashable, H256};
 use std::collections::HashMap;
 
 use futures::executor::block_on;
+use futures::lock;
 use log::{debug, error, warn};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -105,6 +106,52 @@ impl Worker {
                     }
                 }
                 Message::Blocks(blocks) => {
+                    let mut new_block_hashes: Vec<H256> = Vec::new();
+                    let mut unseen: Vec<H256> = Vec::new();
+
+                    for block in blocks.iter() {
+                        // judge if the block already exists in the block chain
+                        if locked_blockchian.blocks.contains_key(&block.hash()){
+                            continue;
+                        }
+                        // judge if not parent already exists, then add current block into buffer
+                        if !locked_blockchian.blocks.contains_key(&block.header.parent){
+                            unseen.push(block.header.parent);
+                            // structure in orphan_buffer:
+                            // key : H256 of parent, value : block of child
+                            locked_orphan_buffer.insert(block.header.parent, block.clone());
+                        }
+                        // parent exists, check from the buffer
+                        else {
+                            let parent_diff = locked_blockchian.blocks[&block.header.parent].header.difficulty;
+                            if block.hash() < block.header.difficulty && parent_diff == block.header.difficulty{
+                                // add current block into chain
+                                locked_blockchian.insert(block);
+                                new_block_hashes.push(block.hash());
+                                // search childs in the buffer and add them into chain iterately.
+                                let mut parent_hash = block.hash();
+
+                                while locked_orphan_buffer.contains_key(&parent_hash){
+                                    // child block of parent_hash
+                                    let child_block = locked_orphan_buffer.remove(&parent_hash).unwrap();
+                                    // add child block
+                                    locked_blockchian.insert(&child_block);
+                                    new_block_hashes.push(child_block.hash());
+                                    // update parent hash for next iteration
+                                    parent_hash = child_block.hash();
+                                }
+                            }
+                        }
+                        
+                    }
+                    if new_block_hashes.len() > 0{
+                        self.server.broadcast(Message::NewBlockHashes(new_block_hashes.clone()));
+                    }
+                    // if unseen.len() > 0 {
+                    //     self.server.broadcast(Message::GetBlocks(unseen.clone()));
+                    // }
+
+
                     let mut new_blocks: Vec<H256> = Vec::new();
                     let mut buffer_parents: Vec<H256> = Vec::new();
 
