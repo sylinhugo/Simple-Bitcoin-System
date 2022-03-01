@@ -123,8 +123,8 @@ impl Worker {
                         }
                         // parent exists, check from the buffer
                         else {
-                            let parent_diff = locked_blockchian.blocks[&block.header.parent].header.difficulty;
-                            if block.hash() < block.header.difficulty && parent_diff == block.header.difficulty{
+                            let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
+                            if block.hash() < block.header.difficulty && root_diff == block.header.difficulty{
                                 // add current block into chain
                                 locked_blockchian.insert(block);
                                 new_block_hashes.push(block.hash());
@@ -134,9 +134,12 @@ impl Worker {
                                 while locked_orphan_buffer.contains_key(&parent_hash){
                                     // child block of parent_hash
                                     let child_block = locked_orphan_buffer.remove(&parent_hash).unwrap();
-                                    // add child block
-                                    locked_blockchian.insert(&child_block);
-                                    new_block_hashes.push(child_block.hash());
+                                    // POV validation
+                                    if child_block.header.difficulty == root_diff && child_block.header.difficulty > child_block.hash(){
+                                        // add child block
+                                        locked_blockchian.insert(&child_block);
+                                        new_block_hashes.push(child_block.hash());
+                                    }
                                     // update parent hash for next iteration
                                     parent_hash = child_block.hash();
                                 }

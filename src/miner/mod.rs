@@ -10,6 +10,7 @@ use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::block::BlockContent;
 use crate::types::block::BlockHeader;
+// use crate::types::block::generate_random_block;
 use crate::types::hash::Hashable;
 use crate::types::hash::H256;
 use crate::types::merkle::MerkleTree;
@@ -162,10 +163,15 @@ impl Context {
             // let mut block_parent = blockchain2.tip();    // Uncomment this, due to test case error
             let block_parent = self.tip;
 
+            // let new_block = generate_random_block(&block_parent);
             let mut rng = rand::thread_rng();
             let block_nonce: u32 = rng.gen();
             // let block_difficulty = blockchain.blocks[&block_parent].header.difficulty;
-            let block_difficulty = [255u8; 32].into();
+            let mut tmp_difficulty = [255u8; 32];
+            tmp_difficulty[0] = 0u8;
+            tmp_difficulty[1] = 0u8;
+            // tmp_difficulty[2] = 0u8;
+            let block_difficulty = tmp_difficulty.into();
 
             let block_timestamp = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -190,7 +196,7 @@ impl Context {
                 content: block_content,
             };
 
-            if new_block.hash() <= block_difficulty {
+            if new_block.hash() <= new_block.header.difficulty {
                 self.finished_block_chan
                     .send(new_block.clone())
                     .expect("Send finished block error");
