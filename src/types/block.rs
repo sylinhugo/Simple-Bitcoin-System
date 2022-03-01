@@ -2,6 +2,7 @@ use super::transaction::SignedTransaction;
 use crate::types::hash::{Hashable, H256};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::str;
 
 // According to midterm1, add Block, BlockHeader and BlockContent
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -57,19 +58,21 @@ impl Block {
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_block(parent: &H256) -> Block {
     use crate::types::merkle::MerkleTree;
-    use rand::Rng;
+    use rand::{Rng, Fill};
     use std::convert::TryInto;
 
     let mut rng = rand::thread_rng();
     // Generate random nonce
     let block_nonce: u32 = rng.gen();
+    // let head_nonce: u8 = 0;
 
-    // Generate random difficulty, and remember H256 is [u8;32]
-    let mut difficulty = Vec::<u8>::with_capacity(32);
-    for _ in 0..32 {
-        difficulty.push(rng.gen());
-    }
-    let tmp_difficulty: [u8; 32] = difficulty.try_into().unwrap();
+    // //Generate random difficulty, and remember H256 is [u8;32]
+    // let mut difficulty = Vec::<u8>::with_capacity(32);
+    // for _ in 0..32 {
+    //     difficulty.push(head_nonce);
+    //     //difficulty.push(rng.gen());
+    // }
+    let tmp_difficulty: [u8; 32] =[63u8; 32];
     let block_difficulty: H256 = tmp_difficulty.into();
 
     // Assign current system timestamp to block

@@ -41,7 +41,7 @@ fn main() {
 
     // proj3 added
     let buffer = Arc::new(Mutex::new(HashMap::new()));
-
+    let orphan_buffer = Arc::new(Mutex::new(HashMap::new()));
     // parse p2p server address
     let p2p_addr = matches
         .value_of("peer_addr")
@@ -82,7 +82,7 @@ fn main() {
             process::exit(1);
         });
     let worker_ctx =
-        network::worker::Worker::new(p2p_workers, msg_rx, &server, &blockchain, &buffer);
+        network::worker::Worker::new(p2p_workers, msg_rx, &server, &blockchain, &buffer, &orphan_buffer);
     worker_ctx.start();
 
     // ------------------------
