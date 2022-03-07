@@ -4,13 +4,14 @@ use super::server::Handle as ServerHandle;
 use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
+use crate::types::transaction::Mempool;
 use std::collections::HashMap;
 
-use futures::executor::block_on;
-use futures::lock;
+// use futures::executor::block_on;
+// use futures::lock;
 use log::{debug, error, warn};
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{thread, mem};
 
 #[cfg(any(test, test_utilities))]
 use super::peer::TestReceiver as PeerTestReceiver;
@@ -23,8 +24,8 @@ pub struct Worker {
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
     buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
-    orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>
-
+    orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>,
+    mempool: Arc<Mutex<Mempool>>,
 }
 
 impl Worker {
@@ -35,6 +36,7 @@ impl Worker {
         blockchain: &Arc<Mutex<Blockchain>>,
         buffer: &Arc<Mutex<HashMap<H256, Block>>>,
         orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>, 
+        mempool: &Arc<Mutex<Mempool>>,
     ) -> Self {
         Self {
             msg_chan: msg_src,
@@ -43,6 +45,7 @@ impl Worker {
             blockchain: Arc::clone(blockchain),
             buffer: Arc::clone(buffer),
             orphan_buffer: Arc::clone(orphan_buffer),
+            mempool: Arc::clone(mempool)
         }
     }
 
@@ -180,13 +183,50 @@ impl Worker {
                     }
                 }
                 Message::NewTransactionHashes(hashes) => {
-                    unimplemented!();
+                    let mempool_mutex = self.mempool.lock().unwrap();
+                    // vector to store transaction not included in mempool
+                    let mut transactions_new = Vec::new();
+                    for hash in hashes {
+                        if !mempool_mutex.tx_map.contains_key(&hash){
+                            transactions_new.push(hash);
+                        }
+                    }
+                    if transactions_new.len() > 0 {
+                        peer.write(Message::GetTransactions(transactions_new));
+                    }
                 }
                 Message::GetTransactions(hashes) => {
-                    unimplemented!();
+                    let mempool_mutex = self.mempool.lock().unwrap();
+                    // vector to store requested blocks
+                    let mut transactions = Vec::new();
+
+                    // let mut map = mempool_mutex.tx_map;
+                    for hash in hashes {
+                        if mempool_mutex.tx_map.contains_key(&hash){
+                            transactions.push(mempool_mutex.tx_map[&hash].clone());
+                        }
+                    }
+                    if transactions.len() > 0 {
+                        peer.write(Message::Transactions(transactions));
+                    }
+
                 }
                 Message::Transactions(transactions) => {
-                    unimplemented!();
+                    let mut mempool_mutex = self.mempool.lock().unwrap();
+
+                    let mut transactions_new = Vec::new();
+
+                    for tx in  transactions {
+                        let t_hash = tx.hash();
+                        // add check here
+                        if !mempool_mutex.tx_map.contains_key(&t_hash){
+                            mempool_mutex.insert(&tx);
+                            transactions_new.push(t_hash);
+                        }
+                    }
+                    if transactions_new.len() > 0 {
+                        peer.write(Message::NewTransactionHashes(transactions_new));
+                    }
                 }
             }
         }
@@ -226,7 +266,9 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
     let buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_buffer));
     let fake_orphan_buffer = HashMap::new();
     let orphan_buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_orphan_buffer));
-    let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer, &orphan_buffer);
+    let fake_mempool = Mempool::new();
+    let mempool: Arc<Mutex<Mempool>> = Arc::new(Mutex::new(fake_mempool));
+    let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer, &orphan_buffer, &mempool);
     worker.start();
 
     let mut res: Vec<H256> = Vec::new();
