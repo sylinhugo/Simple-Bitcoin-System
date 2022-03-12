@@ -2,7 +2,7 @@ extern crate ring;
 
 use std::collections::VecDeque;
 
-use crate::types::hash::{Hashable, H256, H160};
+use crate::types::hash::{Hashable, H256};
 // use crate::crypto::hash::{H256, Hashable, H160};
 use rand::Rng;
 use ring::digest::{self, Context, Digest, SHA256};
@@ -21,19 +21,19 @@ use super::address::Address;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
-    sender: Address,
-    receiver: Address,
-    value: u32,
-    input: Vec<UTXO_input>,
-    output: Vec<UTXO_output>,
+    pub sender: Address,
+    pub receiver: Address,
+    pub value: u32,
+    pub input: Vec<UTXO_input>,
+    pub output: Vec<UTXO_output>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct SignedTransaction {
     // ollow the definition in Midterm1 handout
-    public_key: Vec<u8>,
-    signature: Vec<u8>,
-    transcation: Transaction,
+    pub public_key: Vec<u8>,
+    pub signature: Vec<u8>,
+    pub transcation: Transaction,
 }
 
 
@@ -70,8 +70,8 @@ pub fn sign(t: &Transaction, key: &Ed25519KeyPair) -> Signature {
     signature
 }
 
-/// Verify digital signature of a transaction, using public key instead of secret key
-pub fn verify(t: &Transaction, public_key: &[u8], signature: &[u8]) -> bool {
+// Verify digital signature of a transaction, using public key instead of secret key
+pub fn verify(t: &Transaction, public_key: &Vec<u8>, signature: &Vec<u8>) -> bool {
     // Because in UnparsedPublicKey, the verify need to accept &[u8] as parameter
     // so we need to convert it
     let serial_res = bincode::serialize(t).unwrap();
@@ -80,7 +80,7 @@ pub fn verify(t: &Transaction, public_key: &[u8], signature: &[u8]) -> bool {
     // Verify the signature of the message using the public key. Normally the
     // verifier of the message would parse the inputs to this code out of the
     // protocol message(s) sent by the signer.
-    let public_key_ = signature::UnparsedPublicKey::new(&signature::ED25519, public_key.as_ref());
+    let public_key_ = signature::UnparsedPublicKey::new(&signature::ED25519, public_key);
     let res = public_key_
         .verify(u8_serial_res_2, signature.as_ref())
         .is_ok();
@@ -90,23 +90,25 @@ pub fn verify(t: &Transaction, public_key: &[u8], signature: &[u8]) -> bool {
 
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_transaction() -> Transaction {
-    use std::{convert::TryInto};
-    use crate::types::key_pair;
+    use std::{convert::TryInto, ops::Add};
+    use crate::types::{key_pair, address};
     let mut rng = rand::thread_rng();
     let mut sender = Vec::<u8>::with_capacity(20);
     let mut receiver = Vec::<u8>::with_capacity(20);
-
-    for _ in 0..20 {
+    let mut address_array = [0u8; 20];
+    for i in 0..20 {
         sender.push(rng.gen());
         receiver.push(rng.gen());
+        address_array[i] = rng.gen();
     }
     // assemble utx0_input
-    let key = key_pair::random();
-    let public_key = key.public_key();
-    let pb_hash: H256 = digest::digest(&digest::SHA256, public_key.as_ref()).into();
-    let recipient: H160 = pb_hash.to_addr().into();
+    // let key = key_pair::random();
+    // let public_key = key.public_key();
+    // let pb_hash: H256 = digest::digest(&digest::SHA256, public_key.as_ref()).into();
+    // let recipient: H160 = pb_hash.to_addr().into();
+    let fake_address = Address::new(address_array);
     let value: u64 = rng.gen();
-    let fake_utxo_out = UTXO_output{receipient_address: recipient, value: value};
+    let fake_utxo_out = UTXO_output{receipient_address: fake_address, value: value};
 
     let rand_num: u8 = rng.gen();
     let previous_output: H256 = [rand_num; 32].into();
@@ -136,13 +138,19 @@ mod tests {
     use super::*;
     use crate::types::key_pair;
     use ring::signature::KeyPair;
+    use serde_json::to_vec;
 
     #[test]
     fn sign_verify() {
+        // let t = generate_random_transaction();
+        // let key = key_pair::random();
+        // let signature = sign(&t, &key);
+        // assert!(verify(&t, &(key.public_key()), &signature));
+
         let t = generate_random_transaction();
         let key = key_pair::random();
         let signature = sign(&t, &key);
-        assert!(verify(&t, key.public_key().as_ref(), signature.as_ref()));
+        assert!(verify(&t, &(key.public_key().as_ref().to_vec()), &signature.as_ref().to_vec()));
     }
     #[test]
     fn sign_verify_two() {
@@ -151,8 +159,8 @@ mod tests {
         let signature = sign(&t, &key);
         let key_2 = key_pair::random();
         let t_2 = generate_random_transaction();
-        assert!(!verify(&t_2, key.public_key().as_ref(), signature.as_ref()));
-        assert!(!verify(&t, key_2.public_key().as_ref(), signature.as_ref()));
+        assert!(!verify(&t_2, &key.public_key().as_ref().to_vec(), &signature.as_ref().to_vec()));
+        assert!(!verify(&t, &key_2.public_key().as_ref().to_vec(), &signature.as_ref().to_vec()));
     }
 }
 
@@ -173,7 +181,7 @@ pub struct UTXO_input{
 
 #[derive(Serialize, Deserialize, Debug, Default,Clone)]
 pub struct UTXO_output{
-  pub receipient_address: H160,
+  pub receipient_address: Address,
   pub value: u64,
 }
 

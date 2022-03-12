@@ -4,14 +4,15 @@ use super::server::Handle as ServerHandle;
 use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
-use crate::types::transaction::Mempool;
+use crate::types::transaction::{Mempool, Transaction, SignedTransaction, verify};
 use std::collections::HashMap;
 
 // use futures::executor::block_on;
 // use futures::lock;
 use log::{debug, error, warn};
+use ring::signature;
 use std::sync::{Arc, Mutex};
-use std::{thread, mem};
+use std::{thread, mem, clone};
 
 #[cfg(any(test, test_utilities))]
 use super::peer::TestReceiver as PeerTestReceiver;
@@ -126,8 +127,13 @@ impl Worker {
                         }
                         // parent exists, check from the buffer
                         else {
-                            let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
-                            if block.hash() < block.header.difficulty && root_diff == block.header.difficulty{
+                            let mut tmp_difficulty = [255u8; 32];
+                            tmp_difficulty[0] = 0u8;
+                            tmp_difficulty[1] = 0u8;
+                            tmp_difficulty[2] = 63u8;
+                            let root_diff:H256 = tmp_difficulty.into();
+                            // let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
+                            if block.hash() < block.header.difficulty && block.header.difficulty == root_diff{
                                 // add current block into chain
                                 locked_blockchian.insert(block);
                                 new_block_hashes.push(block.hash());
@@ -153,34 +159,34 @@ impl Worker {
                     if new_block_hashes.len() > 0{
                         self.server.broadcast(Message::NewBlockHashes(new_block_hashes.clone()));
                     }
-                    // if unseen.len() > 0 {
-                    //     self.server.broadcast(Message::GetBlocks(unseen.clone()));
+                    if unseen.len() > 0 {
+                        self.server.broadcast(Message::GetBlocks(unseen.clone()));
+                    }
+
+
+                    // let mut new_blocks: Vec<H256> = Vec::new();
+                    // let mut buffer_parents: Vec<H256> = Vec::new();
+
+                    // for block in blocks.iter() {
+                    //     // If the block isn't inside blockchain, then we can try to insert it
+                    //     // Or, we just pass it
+                    //     if !(locked_blockchian.blocks.contains_key(&block.hash())) {
+                    //         // If block's parent isn't inside the blockchain,
+                    //         // then we need to wait until block's parent be added in.
+                    //         if locked_blockchian.blocks.contains_key(&block.header.parent) {
+                    //             locked_blockchian.insert(block);
+                    //             new_blocks.push(block.hash());
+                    //         } else {
+                    //             locked_bffer.insert(block.header.parent, block.clone());
+                    //             buffer_parents.push(block.header.parent.clone());
+                    //             peer.write(Message::GetBlocks(buffer_parents.clone()));
+                    //         }
+                    //     }
                     // }
-
-
-                    let mut new_blocks: Vec<H256> = Vec::new();
-                    let mut buffer_parents: Vec<H256> = Vec::new();
-
-                    for block in blocks.iter() {
-                        // If the block isn't inside blockchain, then we can try to insert it
-                        // Or, we just pass it
-                        if !(locked_blockchian.blocks.contains_key(&block.hash())) {
-                            // If block's parent isn't inside the blockchain,
-                            // then we need to wait until block's parent be added in.
-                            if locked_blockchian.blocks.contains_key(&block.header.parent) {
-                                locked_blockchian.insert(block);
-                                new_blocks.push(block.hash());
-                            } else {
-                                locked_bffer.insert(block.header.parent, block.clone());
-                                buffer_parents.push(block.header.parent.clone());
-                                peer.write(Message::GetBlocks(buffer_parents.clone()));
-                            }
-                        }
-                    }
-                    if new_blocks.len() > 0 {
-                        self.server
-                            .broadcast(Message::NewBlockHashes(new_blocks.clone()));
-                    }
+                    // if new_blocks.len() > 0 {
+                    //     self.server
+                    //         .broadcast(Message::NewBlockHashes(new_blocks.clone()));
+                    // }
                 }
                 Message::NewTransactionHashes(hashes) => {
                     let mempool_mutex = self.mempool.lock().unwrap();
@@ -211,16 +217,22 @@ impl Worker {
                     }
 
                 }
-                Message::Transactions(transactions) => {
+                Message::Transactions(signedtransactions) => {
                     let mut mempool_mutex = self.mempool.lock().unwrap();
 
                     let mut transactions_new = Vec::new();
 
-                    for tx in  transactions {
+                    for tx in signedtransactions {
                         let t_hash = tx.hash();
+                        let public_key_tx = tx.public_key;
+                        let signature_tx = tx.signature;
+                        let transaction = tx.transcation;
+                        // verify(transaction, public_key_tx, signature);
                         // add check here
                         if !mempool_mutex.tx_map.contains_key(&t_hash){
-                            mempool_mutex.insert(&tx);
+                            let clone_tx = transaction.clone();
+                            let clone_signed_tx = SignedTransaction{public_key: public_key_tx.clone(), signature: signature_tx.clone(), transcation: clone_tx};
+                            mempool_mutex.insert(&clone_signed_tx);
                             transactions_new.push(t_hash);
                         }
                     }
