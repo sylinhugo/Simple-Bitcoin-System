@@ -14,6 +14,7 @@ use crate::types::block::BlockHeader;
 use crate::types::hash::Hashable;
 use crate::types::hash::H256;
 use crate::types::merkle::MerkleTree;
+use crate::types::transaction::Mempool;
 use crate::types::transaction::SignedTransaction;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -37,6 +38,7 @@ pub struct Context {
     finished_block_chan: Sender<Block>,
     blockchain: Arc<Mutex<Blockchain>>, // midterm2, according to document, implement this type
     tip: H256, // midterm2, the reason why add this part is from the discusssion on piazza
+    mempool: Arc<Mutex<Mempool>> // mempool for midproject5
 }
 
 #[derive(Clone)]
@@ -49,12 +51,14 @@ pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Bl
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
 
+    let fake_mempool  = Arc::new(Mutex::new(Mempool::new()));
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
         blockchain: Arc::clone(blockchain),    // midterm2 added
         tip: blockchain.lock().unwrap().tip(), // midterm2 added
+        mempool: Arc::clone(&fake_mempool)
     };
 
     let handle = Handle {
@@ -167,6 +171,7 @@ impl Context {
             let mut rng = rand::thread_rng();
             let block_nonce: u32 = rng.gen();
             // let block_difficulty = blockchain.blocks[&block_parent].header.difficulty;
+            // adjust the difficulty to modify mining speed
             let mut tmp_difficulty = [255u8; 32];
             tmp_difficulty[0] = 0u8;
             tmp_difficulty[1] = 0u8;
@@ -178,8 +183,20 @@ impl Context {
                 .unwrap()
                 .as_millis();
 
-            let fake_transcation: Vec<SignedTransaction> = Vec::new();
-            let merklt_tree = MerkleTree::new(&fake_transcation);
+            // 
+            let mut mempool_mutex = self.mempool.lock().unwrap();
+            let mut packed_transcation: Vec<SignedTransaction> = Vec::new();
+
+            // add transactions from mempool
+            for i in 0..20 {
+                // if mempool not empty, pop values from mempool
+                if !mempool_mutex.deque.is_empty() {
+                    let first_hash = mempool_mutex.deque.pop_front().unwrap();
+                    let first_tx = mempool_mutex.tx_map.remove(&first_hash).unwrap();
+                    packed_transcation.push(first_tx.clone());
+                }
+            }
+            let merklt_tree = MerkleTree::new(&packed_transcation);
 
             let block_header = BlockHeader {
                 parent: block_parent,
@@ -189,7 +206,7 @@ impl Context {
                 merkle_root: merklt_tree.root(),
             };
             let block_content = BlockContent {
-                content: fake_transcation,
+                content: packed_transcation,
             };
             let new_block = Block {
                 header: block_header,

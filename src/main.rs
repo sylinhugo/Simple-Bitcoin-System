@@ -12,8 +12,10 @@ use api::Server as ApiServer;
 use blockchain::Blockchain;
 use clap::clap_app;
 use log::{error, info};
+use serde::__private::ser;
 use smol::channel;
 use types::transaction::Mempool;
+use types::transaction_generate;
 use std::collections::HashMap;
 use std::net;
 use std::process;
@@ -129,6 +131,11 @@ fn main() {
         });
     }
 
+    let txs_generator = transaction_generate::new(
+        &server,
+        &mempool
+    );
+    txs_generator.start();
     // start the API server
     ApiServer::start(api_addr, &miner, &server, &blockchain);
 
