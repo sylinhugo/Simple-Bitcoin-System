@@ -86,6 +86,10 @@ impl Blockchain {
         return self.tip;
     }
 
+    pub fn get(&self, hash :H256) -> Block{
+        return self.blocks[&hash].clone();
+    }
+
     /// Get all blocks' hashes of the longest chain, ordered from genesis to the tip
     pub fn all_blocks_in_longest_chain(&self) -> Vec<H256> {
         let mut res = Vec::new();

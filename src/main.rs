@@ -18,6 +18,7 @@ use types::transaction::Mempool;
 use types::transaction_generate;
 use std::collections::HashMap;
 use std::net;
+use std::ops::RangeBounds;
 use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -41,7 +42,6 @@ fn main() {
     stderrlog::new().verbosity(verbosity).init().unwrap();
     let blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(blockchain));
-
     // proj3 added
     let buffer = Arc::new(Mutex::new(HashMap::new()));
     let orphan_buffer = Arc::new(Mutex::new(HashMap::new()));
@@ -74,7 +74,7 @@ fn main() {
     server_ctx.start().unwrap();
 
     // According to midterm2, we need to declare new blockchain object
-    let _blockchain = Arc::new(Mutex::new(blockchain::Blockchain::new()));
+    // let _blockchain = Arc::new(Mutex::new(blockchain::Blockchain::new()));
 
     // start the worker
     let p2p_workers = matches
@@ -89,9 +89,17 @@ fn main() {
         network::worker::Worker::new(p2p_workers, msg_rx, &server, &blockchain, &buffer, &orphan_buffer, &mempool);
     worker_ctx.start();
 
+    // responsible for generate random transactions
+    let (txs_generator_ctx, txs_generator) = transaction_generate::new(
+        &server,
+        &mempool
+    );
+    txs_generator_ctx.start();
     // ------------------------
     // start the miner
     // According to midterm2, we need to do some modifications
+    ///// add a mempool variable?
+    // let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain, &mempool);
     let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain);
     let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan, &blockchain);
     miner_ctx.start();
@@ -130,15 +138,10 @@ fn main() {
             }
         });
     }
-
-    let txs_generator = transaction_generate::new(
-        &server,
-        &mempool
-    );
-    txs_generator.start();
+    
     // start the API server
-    ApiServer::start(api_addr, &miner, &server, &blockchain);
-
+    ApiServer::start(api_addr, &miner, &server, &blockchain, &txs_generator);
+    // debug!("test");
     loop {
         std::thread::park();
     }

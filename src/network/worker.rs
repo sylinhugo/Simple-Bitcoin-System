@@ -6,6 +6,7 @@ use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
 use crate::types::transaction::{Mempool, Transaction, SignedTransaction, verify};
 use std::collections::HashMap;
+use std::convert::TryInto;
 
 // use futures::executor::block_on;
 // use futures::lock;
@@ -189,55 +190,66 @@ impl Worker {
                     // }
                 }
                 Message::NewTransactionHashes(hashes) => {
+                    println!("receive req new txs");
                     let mempool_mutex = self.mempool.lock().unwrap();
                     // vector to store transaction not included in mempool
                     let mut transactions_new = Vec::new();
-                    for hash in hashes {
-                        if !mempool_mutex.tx_map.contains_key(&hash){
-                            transactions_new.push(hash);
+                    for hash in hashes.iter() {
+                        if !mempool_mutex.tx_map.contains_key(hash){
+                            transactions_new.push(hash.clone());
                         }
                     }
                     if transactions_new.len() > 0 {
                         peer.write(Message::GetTransactions(transactions_new));
+                        println!("request new txs");
                     }
                 }
                 Message::GetTransactions(hashes) => {
+                    println!("receive req get txs");
                     let mempool_mutex = self.mempool.lock().unwrap();
                     // vector to store requested blocks
                     let mut transactions = Vec::new();
 
                     // let mut map = mempool_mutex.tx_map;
-                    for hash in hashes {
-                        if mempool_mutex.tx_map.contains_key(&hash){
-                            transactions.push(mempool_mutex.tx_map[&hash].clone());
+                    for hash in hashes.iter() {
+                        if mempool_mutex.tx_map.contains_key(hash){
+                            transactions.push(mempool_mutex.tx_map[hash].clone());
                         }
                     }
                     if transactions.len() > 0 {
                         peer.write(Message::Transactions(transactions));
+                        println!("return all txs that are requested");
                     }
 
                 }
                 Message::Transactions(signedtransactions) => {
+                    println!("receive req txs");
                     let mut mempool_mutex = self.mempool.lock().unwrap();
 
                     let mut transactions_new = Vec::new();
 
                     for tx in signedtransactions {
+                        
                         let t_hash = tx.hash();
                         let public_key_tx = tx.public_key;
                         let signature_tx = tx.signature;
                         let transaction = tx.transcation;
-                        // verify(transaction, public_key_tx, signature);
+                        // verify with the publickey
+                        // if !verify(&transaction, &public_key_tx, &signature_tx){
+                        //     continue;
+                        // }
                         // add check here
                         if !mempool_mutex.tx_map.contains_key(&t_hash){
                             let clone_tx = transaction.clone();
                             let clone_signed_tx = SignedTransaction{public_key: public_key_tx.clone(), signature: signature_tx.clone(), transcation: clone_tx};
                             mempool_mutex.insert(&clone_signed_tx);
+                            println!("adding new txs in mempool");
                             transactions_new.push(t_hash);
                         }
                     }
                     if transactions_new.len() > 0 {
                         peer.write(Message::NewTransactionHashes(transactions_new));
+                        println!("inserting some in mempool, tell others adding some new txs");
                     }
                 }
             }

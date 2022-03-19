@@ -50,15 +50,14 @@ pub struct Handle {
 pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Block>) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
-
-    let fake_mempool  = Arc::new(Mutex::new(Mempool::new()));
+    let fake_mempool = Mempool::new();
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
         blockchain: Arc::clone(blockchain),    // midterm2 added
         tip: blockchain.lock().unwrap().tip(), // midterm2 added
-        mempool: Arc::clone(&fake_mempool)
+        mempool: Arc::new(Mutex::new(fake_mempool.clone())),
     };
 
     let handle = Handle {
@@ -73,6 +72,8 @@ pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Bl
 fn test_new() -> (Context, Handle, Receiver<Block>) {
     let fake_blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(fake_blockchain));
+    let fake_mempool = Mempool::new();
+    let mempool = Arc::new(Mutex::new(fake_mempool));
     new(&blockchain)
 }
 
@@ -196,6 +197,7 @@ impl Context {
                     packed_transcation.push(first_tx.clone());
                 }
             }
+            // print!("The number is {}", mempool_mutex.deque.len());
             let merklt_tree = MerkleTree::new(&packed_transcation);
 
             let block_header = BlockHeader {
@@ -220,8 +222,9 @@ impl Context {
 
                 // block_parent = new_block.hash();     // this will not work, failed to pass miner_three_block() case
                 self.tip = new_block.hash();
+                print!("mining a new block is {}", 1);
             }
-
+            // print!("test for mining a new block");
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {
                     let interval = time::Duration::from_micros(i as u64);
