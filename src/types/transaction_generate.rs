@@ -20,7 +20,7 @@ use ring::signature::{self, Ed25519KeyPair, Signature, KeyPair, VerificationAlgo
 use rand::Rng;
 use rand::seq::SliceRandom;
 
-use super::block;
+use super::block::{self, Block};
 
 // enum class that supports message in channel
 enum ControlSignal {
@@ -44,7 +44,7 @@ pub struct Context {
     // finished_block_chan: Sender<Block>,
     // sender_chan: Sender<SignedTransaction>,
     server: ServerHandle,
-    mempool: Arc<Mutex<Mempool>>, 
+    blockchain: Arc<Mutex<Blockchain>>, 
 }
 
 #[derive(Clone)]
@@ -55,7 +55,7 @@ pub struct Handle {
 
 pub fn new(
     server: &ServerHandle,
-    mempool: &Arc<Mutex<Mempool>>,
+    blockchain: &Arc<Mutex<Blockchain>>, 
 ) -> (Context, Handle) {
     // bound receiver and sender to comunication in channels
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
@@ -65,7 +65,8 @@ pub fn new(
         operating_state: OperatingState::Paused,
         // sender_chan: txs_chan_sender,
         server: server.clone(),
-        mempool: Arc::clone(mempool),
+        blockchain: blockchain.clone(),
+        // mempool: Arc::clone(mempool),
     };
 
     let handle = Handle {
@@ -109,8 +110,7 @@ impl Context {
         // On startup, insert and ICO for yourself into the mempool
         info!("Executing ICO - Generating Sourceless TX");
 
-
-        let mut mempool_locked = self.mempool.lock().unwrap();
+        
 
 
         // Share ICO TX with others - they likely won't mine it, but should have it on hand
@@ -118,6 +118,7 @@ impl Context {
         // self.server.broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
 
         loop {
+            
             // print!("matching state");
             match self.operating_state {
                 OperatingState::Paused => {
@@ -164,7 +165,9 @@ impl Context {
             if let OperatingState::ShutDown = self.operating_state {
                 return;
             }
-
+            let blockchain_mtx = self.blockchain.lock().unwrap();
+            let mut mempool_locked = blockchain_mtx.mempool.lock().unwrap();
+            println!("Generate a transaction, size of mempool 0 {}", mempool_locked.deque.len());
             use std::{convert::TryInto, ops::Add};
             use crate::types::{key_pair, address};
             // assemble a fake transaction
@@ -207,13 +210,14 @@ impl Context {
             let signed_tx = SignedTransaction{public_key: key.public_key().as_ref().to_vec(), signature: signature.as_ref().to_vec(), transcation: transc};
             // add assembled random signedtransaction into mempool
             // println!("mempool size {}", mempool_locked.deque.len());
+            println!("Generate a transaction, size of mempool 1 {}", mempool_locked.deque.len());
             mempool_locked.insert(&signed_tx);
             let signed_tx_hash: H256 = signed_tx.hash();
             // broadcast new signedtx inserted
             println!("new_transaction hash");
             // peer.write(Message::NewTransactionHashes(vec![signed_tx_hash]);
             self.server.broadcast(Message::Transactions(vec![signed_tx]));
-            self.server.broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
+            // self.server.broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
             
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {
@@ -221,9 +225,13 @@ impl Context {
                     thread::sleep(interval);
                 }
             }
-            println!("Generate a transaction, size of mempool {}", mempool_locked.deque.len());
+            
+            println!("Generate a transaction, size of mempool 2 {}", mempool_locked.deque.len());
+            drop(mempool_locked);
+            drop(blockchain_mtx);
             // println!("Generate a transaction, size of map {}", mempool_locked.tx_map.len());
             thread::sleep(time::Duration::from_millis(1000));
+            
         }
     }
 }

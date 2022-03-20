@@ -185,20 +185,13 @@ impl Context {
                 .as_millis();
 
             // 
-            let mut mempool_mutex = self.mempool.lock().unwrap();
+            let mut mempool_mutex = blockchain.mempool.lock().unwrap();
             let mut packed_transcation: Vec<SignedTransaction> = Vec::new();
 
-            // add transactions from mempool
-            for i in 0..20 {
-                // if mempool not empty, pop values from mempool
-                if !mempool_mutex.deque.is_empty() {
-                    let first_hash = mempool_mutex.deque.pop_front().unwrap();
-                    let first_tx = mempool_mutex.tx_map.remove(&first_hash).unwrap();
-                    packed_transcation.push(first_tx.clone());
-                }
-            }
+            let top_txs = mempool_mutex.get_headtransactions(); // first 20 transaction to assemble merkle tree
+            
             // print!("The number is {}", mempool_mutex.deque.len());
-            let merklt_tree = MerkleTree::new(&packed_transcation);
+            let merklt_tree = MerkleTree::new(&top_txs);
 
             let block_header = BlockHeader {
                 parent: block_parent,
@@ -207,15 +200,32 @@ impl Context {
                 timestamp: block_timestamp,
                 merkle_root: merklt_tree.root(),
             };
-            let block_content = BlockContent {
-                content: packed_transcation,
-            };
-            let new_block = Block {
-                header: block_header,
-                content: block_content,
-            };
+            
 
-            if new_block.hash() <= new_block.header.difficulty {
+            
+
+            if block_header.hash() <= block_difficulty {
+                
+                for i in 0..20 {
+                    // if mempool not empty, pop values from mempool
+                    if !mempool_mutex.deque.is_empty() {
+                        let first_hash = mempool_mutex.deque.pop_front().unwrap();
+                        let first_tx = mempool_mutex.tx_map.remove(&first_hash).unwrap();
+                        packed_transcation.push(first_tx.clone());
+                    }
+                    else {
+                        break;
+                    }
+                }
+    
+                let block_content = BlockContent {
+                    content: top_txs,
+                };
+                let new_block = Block {
+                    header: block_header,
+                    content: block_content,
+                };
+
                 self.finished_block_chan
                     .send(new_block.clone())
                     .expect("Send finished block error");
@@ -223,6 +233,7 @@ impl Context {
                 // block_parent = new_block.hash();     // this will not work, failed to pass miner_three_block() case
                 self.tip = new_block.hash();
                 print!("mining a new block is {}", 1);
+                
             }
             // print!("test for mining a new block");
             if let OperatingState::Run(i) = self.operating_state {
@@ -231,6 +242,8 @@ impl Context {
                     thread::sleep(interval);
                 }
             }
+            drop(mempool_mutex);
+            drop(blockchain);
         }
     }
 }

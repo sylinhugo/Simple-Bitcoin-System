@@ -1,5 +1,6 @@
 extern crate ring;
 
+use std::cmp;
 use std::collections::VecDeque;
 
 use crate::types::hash::{Hashable, H256};
@@ -214,6 +215,14 @@ impl Mempool {
     //     }
     //     self.nonce_map.insert(acc_nonce, t_hash);
     //     self.tx_map.insert(t_hash, t.clone());
+    }
+    pub fn get_headtransactions(&self) -> Vec<SignedTransaction>{
+        let count = cmp::min(20, self.deque.len());
+        self.deque
+            .iter()
+            .take(count as usize)
+            .map(|h| self.tx_map.get(h).unwrap().clone())
+            .collect()
     }
 
     pub fn remove(&mut self, t: &SignedTransaction) {

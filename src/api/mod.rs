@@ -140,9 +140,14 @@ impl Server {
                             respond_result!(req, true, "ok");
                         }
                         "/blockchain/longest-chain" => {
+                            println!("test1");
                             let blockchain = blockchain.lock().unwrap();
+                            println!("test2");
                             let v = blockchain.all_blocks_in_longest_chain();
+                            println!("test3");
                             let v_string: Vec<String> = v.into_iter().map(|h|h.to_string()).collect();
+                            println!("test4");
+                            drop(blockchain);
                             respond_json!(req, v_string);
                         }
                         "/blockchain/longest-chain-tx" => {
@@ -154,6 +159,7 @@ impl Server {
 
                             // get all txs of a single block
                             let mut i = 0;
+                            println!("visiting long chain tx");
                             for block_hash in blockchain_mtx.all_blocks_in_longest_chain() {
                                 let block = blockchain_mtx.get(block_hash);
                                 let content = block.content.content;
@@ -161,15 +167,16 @@ impl Server {
                                 // res.push("hello");
                                 // tmp Vec to record hashes of txs in a block
                                 let mut tmp = Vec::new();
-                                tmp.push(len);
+                                // tmp.push(len);
                                 for i in 0..len {
                                     // tmp.push(1231343);
-                                    tmp.push(len);
-                                    // tmp.push(content[i].hash());
+                                    // tmp.push(len);
+                                    tmp.push(content[i].hash());
                                 }
                                 i += 1;
                                 res.push(tmp);
                             }
+                            drop(blockchain_mtx);
                             println!("how many blocks in chain {}", i);
                             respond_json!(req, res);
                             // respond_result!(req, true, "ok");

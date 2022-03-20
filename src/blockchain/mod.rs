@@ -1,12 +1,17 @@
+
+
 use crate::types::block::{Block, BlockContent, BlockHeader};
 use crate::types::hash::{Hashable, H256};
 use crate::types::merkle::MerkleTree;
+use crate::types::transaction::Mempool;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 pub struct Blockchain {
     pub tip: H256,                    // tip is the last block's hash in the longest chain
     pub blocks: HashMap<H256, Block>, // mapping hashing of block and the block
     pub lengths: HashMap<H256, u32>,  // mapping hashing of block and its length index
+    pub mempool: Arc<Mutex<Mempool>>,
 }
 
 impl Blockchain {
@@ -48,10 +53,13 @@ impl Blockchain {
         _blocks.insert(_hash, new_block);
         _lengths.insert(_hash, 0);
 
+        // add mempool
+        let mut _mempool = Arc::new(Mutex::new(Mempool::new()));
         Self {
             tip: _hash,
             blocks: _blocks,
             lengths: _lengths,
+            mempool: _mempool,
         }
     }
 

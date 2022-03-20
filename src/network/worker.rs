@@ -27,7 +27,7 @@ pub struct Worker {
     blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
     buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
     orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>,
-    mempool: Arc<Mutex<Mempool>>,
+    // mempool: Arc<Mutex<Mempool>>,
 }
 
 impl Worker {
@@ -38,7 +38,7 @@ impl Worker {
         blockchain: &Arc<Mutex<Blockchain>>,
         buffer: &Arc<Mutex<HashMap<H256, Block>>>,
         orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>, 
-        mempool: &Arc<Mutex<Mempool>>,
+        // mempool: &Arc<Mutex<Mempool>>,
     ) -> Self {
         Self {
             msg_chan: msg_src,
@@ -47,7 +47,7 @@ impl Worker {
             blockchain: Arc::clone(blockchain),
             buffer: Arc::clone(buffer),
             orphan_buffer: Arc::clone(orphan_buffer),
-            mempool: Arc::clone(mempool)
+            // mempool: Arc::clone(mempool)
         }
     }
 
@@ -191,7 +191,7 @@ impl Worker {
                 }
                 Message::NewTransactionHashes(hashes) => {
                     println!("receive req new txs");
-                    let mempool_mutex = self.mempool.lock().unwrap();
+                    let mempool_mutex = locked_blockchian.mempool.lock().unwrap();
                     // vector to store transaction not included in mempool
                     let mut transactions_new = Vec::new();
                     for hash in hashes.iter() {
@@ -203,10 +203,11 @@ impl Worker {
                         peer.write(Message::GetTransactions(transactions_new));
                         println!("request new txs");
                     }
+                    drop(mempool_mutex);
                 }
                 Message::GetTransactions(hashes) => {
                     println!("receive req get txs");
-                    let mempool_mutex = self.mempool.lock().unwrap();
+                    let mempool_mutex = locked_blockchian.mempool.lock().unwrap();
                     // vector to store requested blocks
                     let mut transactions = Vec::new();
 
@@ -220,11 +221,11 @@ impl Worker {
                         peer.write(Message::Transactions(transactions));
                         println!("return all txs that are requested");
                     }
-
+                    drop(mempool_mutex);
                 }
                 Message::Transactions(signedtransactions) => {
                     println!("receive req txs");
-                    let mut mempool_mutex = self.mempool.lock().unwrap();
+                    let mut mempool_mutex = locked_blockchian.mempool.lock().unwrap();
 
                     let mut transactions_new = Vec::new();
 
@@ -251,8 +252,12 @@ impl Worker {
                         peer.write(Message::NewTransactionHashes(transactions_new));
                         println!("inserting some in mempool, tell others adding some new txs");
                     }
+                    drop(mempool_mutex);
                 }
             }
+            drop(locked_blockchian);
+            drop(locked_bffer);
+            drop(locked_orphan_buffer);
         }
     }
 }
@@ -292,7 +297,7 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
     let orphan_buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_orphan_buffer));
     let fake_mempool = Mempool::new();
     let mempool: Arc<Mutex<Mempool>> = Arc::new(Mutex::new(fake_mempool));
-    let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer, &orphan_buffer, &mempool);
+    let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer, &orphan_buffer);
     worker.start();
 
     let mut res: Vec<H256> = Vec::new();
