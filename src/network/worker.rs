@@ -130,8 +130,8 @@ impl Worker {
                         else {
                             let mut tmp_difficulty = [255u8; 32];
                             tmp_difficulty[0] = 0u8;
-                            tmp_difficulty[1] = 0u8;
-                            tmp_difficulty[2] = 63u8;
+                            // tmp_difficulty[1] = 0u8;
+                            // tmp_difficulty[2] = 63u8;
                             let root_diff:H256 = tmp_difficulty.into();
                             // let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
                             if block.hash() < block.header.difficulty && block.header.difficulty == root_diff{
@@ -201,12 +201,12 @@ impl Worker {
                     }
                     if transactions_new.len() > 0 {
                         peer.write(Message::GetTransactions(transactions_new));
-                        println!("request new txs");
+                        // println!("request new txs");
                     }
                     drop(mempool_mutex);
                 }
                 Message::GetTransactions(hashes) => {
-                    println!("receive req get txs");
+                    // println!("receive req get txs");
                     let mempool_mutex = locked_blockchian.mempool.lock().unwrap();
                     // vector to store requested blocks
                     let mut transactions = Vec::new();
@@ -219,12 +219,12 @@ impl Worker {
                     }
                     if transactions.len() > 0 {
                         peer.write(Message::Transactions(transactions));
-                        println!("return all txs that are requested");
+                        // println!("return all txs that are requested");
                     }
                     drop(mempool_mutex);
                 }
                 Message::Transactions(signedtransactions) => {
-                    println!("receive req txs");
+                    // println!("receive req txs");
                     let mut mempool_mutex = locked_blockchian.mempool.lock().unwrap();
 
                     let mut transactions_new = Vec::new();
@@ -244,13 +244,13 @@ impl Worker {
                             let clone_tx = transaction.clone();
                             let clone_signed_tx = SignedTransaction{public_key: public_key_tx.clone(), signature: signature_tx.clone(), transcation: clone_tx};
                             mempool_mutex.insert(&clone_signed_tx);
-                            println!("adding new txs in mempool");
+                            // println!("adding new txs in mempool");
                             transactions_new.push(t_hash);
                         }
                     }
                     if transactions_new.len() > 0 {
-                        peer.write(Message::NewTransactionHashes(transactions_new));
-                        println!("inserting some in mempool, tell others adding some new txs");
+                        self.server.broadcast(Message::NewTransactionHashes(transactions_new));
+                        // println!("inserting some in mempool, tell others adding some new txs");
                     }
                     drop(mempool_mutex);
                 }

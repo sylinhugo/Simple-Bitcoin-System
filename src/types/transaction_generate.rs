@@ -167,7 +167,7 @@ impl Context {
             }
             let blockchain_mtx = self.blockchain.lock().unwrap();
             let mut mempool_locked = blockchain_mtx.mempool.lock().unwrap();
-            println!("Generate a transaction, size of mempool 0 {}", mempool_locked.deque.len());
+            // println!("Generate a transaction, size of mempool 0 {}", mempool_locked.deque.len());
             use std::{convert::TryInto, ops::Add};
             use crate::types::{key_pair, address};
             // assemble a fake transaction
@@ -214,7 +214,7 @@ impl Context {
             mempool_locked.insert(&signed_tx);
             let signed_tx_hash: H256 = signed_tx.hash();
             // broadcast new signedtx inserted
-            println!("new_transaction hash");
+            // println!("new_transaction hash");
             // peer.write(Message::NewTransactionHashes(vec![signed_tx_hash]);
             self.server.broadcast(Message::Transactions(vec![signed_tx]));
             // self.server.broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
@@ -226,7 +226,7 @@ impl Context {
                 }
             }
             
-            println!("Generate a transaction, size of mempool 2 {}", mempool_locked.deque.len());
+            // println!("Generate a transaction, size of mempool 2 {}", mempool_locked.deque.len());
             drop(mempool_locked);
             drop(blockchain_mtx);
             // println!("Generate a transaction, size of map {}", mempool_locked.tx_map.len());

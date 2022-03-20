@@ -171,7 +171,7 @@ impl Server {
                                 for i in 0..len {
                                     // tmp.push(1231343);
                                     // tmp.push(len);
-                                    tmp.push(content[i].hash());
+                                    tmp.push(content[i].hash().to_string());
                                 }
                                 i += 1;
                                 res.push(tmp);
