@@ -218,19 +218,19 @@ impl Context {
             // peer.write(Message::NewTransactionHashes(vec![signed_tx_hash]);
             self.server.broadcast(Message::Transactions(vec![signed_tx]));
             // self.server.broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
-            
+            drop(mempool_locked);
+            drop(blockchain_mtx);
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {
-                    let interval = time::Duration::from_micros(i as u64);
+                    let interval = time::Duration::from_millis(i as u64);
                     thread::sleep(interval);
                 }
             }
             
             // println!("Generate a transaction, size of mempool 2 {}", mempool_locked.deque.len());
-            drop(mempool_locked);
-            drop(blockchain_mtx);
+            
             // println!("Generate a transaction, size of map {}", mempool_locked.tx_map.len());
-            thread::sleep(time::Duration::from_millis(1000));
+            // thread::sleep(time::Duration::from_millis(1000));
             
         }
     }
