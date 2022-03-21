@@ -24,7 +24,7 @@ use super::block::{self, Block};
 
 // enum class that supports message in channel
 enum ControlSignal {
-    Start(u64), // the number controls the lambda of interval between block generation
+    Start(u64), // the number controls the theta of interval between block generation
     Update, // change name Gen to Update
     Exit,
 }
@@ -81,9 +81,9 @@ impl Handle {
         self.control_chan.send(ControlSignal::Exit).unwrap();
     }
 
-    pub fn start(&self, lambda: u64) {
+    pub fn start(&self, theta: u64) {
         self.control_chan
-            .send(ControlSignal::Start(lambda))
+            .send(ControlSignal::Start(theta))
             .unwrap();
     }
 
@@ -130,7 +130,7 @@ impl Context {
                             self.operating_state = OperatingState::ShutDown;
                         }
                         ControlSignal::Start(i) => {
-                            info!("Generator starting in continuous mode with lambda {}", i);
+                            info!("Generator starting in continuous mode with theta {}", i);
                             self.operating_state = OperatingState::Run(i);
                         }
                         ControlSignal::Update => {
@@ -150,7 +150,7 @@ impl Context {
                                 self.operating_state = OperatingState::ShutDown;
                             }
                             ControlSignal::Start(i) => {
-                                info!("Generator starting in continuous mode with lambda {}", i);
+                                info!("Generator starting in continuous mode with theta {}", i);
                                 self.operating_state = OperatingState::Run(i);
                             }
                             ControlSignal::Update => {
@@ -222,7 +222,7 @@ impl Context {
             drop(blockchain_mtx);
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {
-                    let interval = time::Duration::from_millis(i as u64);
+                    let interval = time::Duration::from_millis(i / 10 as u64);
                     thread::sleep(interval);
                 }
             }

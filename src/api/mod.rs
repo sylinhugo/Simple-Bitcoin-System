@@ -112,27 +112,27 @@ impl Server {
                         "/tx-generator/start" => {
                             let params = url.query_pairs();
                             let params: HashMap<_, _> = params.into_owned().collect();
-                            // without lambda return null
-                            let lambda = match params.get("lambda") {
+                            // without theta return null
+                            let theta = match params.get("theta") {
                                 Some(v) => v,
                                 None => {
-                                    respond_result!(req, false, "missing lambda");
+                                    respond_result!(req, false, "missing theta");
                                     return;
                                 }
                             };
-                            // cannot parse lambda
-                            let lambda = match lambda.parse::<u64>() {
+                            // cannot parse theta
+                            let theta = match theta.parse::<u64>() {
                                 Ok(v) => v,
                                 Err(e) => {
                                     respond_result!(
                                         req,
                                         false,
-                                        format!("error parsing lambda: {}", e)
+                                        format!("error parsing theta: {}", e)
                                     );
                                     return;
                                 }
                             };
-                            tx_generator.start(lambda);
+                            tx_generator.start(theta);
                             respond_result!(req, true, "ok!");
                         }
                         "/network/ping" => {
