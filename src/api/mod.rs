@@ -1,13 +1,13 @@
-use serde::Serialize;
-use crate::blockchain::{Blockchain, self};
+use crate::blockchain::{self, Blockchain};
 use crate::miner::Handle as MinerHandle;
-use crate::network::server::Handle as NetworkServerHandle;
 use crate::network::message::Message;
+use crate::network::server::Handle as NetworkServerHandle;
 use crate::types::block;
 use crate::types::hash::Hashable;
 use crate::types::transaction_generate::Handle as TXGenerateHandle;
+use serde::Serialize;
 
-use log::{info,debug};
+use log::{debug, info};
 use std::collections::HashMap;
 use std::ops::RangeBounds;
 use std::sync::{Arc, Mutex};
@@ -145,7 +145,8 @@ impl Server {
                             println!("test2");
                             let v = blockchain.all_blocks_in_longest_chain();
                             println!("test3");
-                            let v_string: Vec<String> = v.into_iter().map(|h|h.to_string()).collect();
+                            let v_string: Vec<String> =
+                                v.into_iter().map(|h| h.to_string()).collect();
                             println!("test4");
                             drop(blockchain);
                             respond_json!(req, v_string);
@@ -153,24 +154,18 @@ impl Server {
                         "/blockchain/longest-chain-tx" => {
                             let blockchain_mtx = blockchain.lock().unwrap();
                             let mut res = Vec::new();
-                            // let mut test = Vec::new();
-                            // test.push("ge");
-                            // res.push(test);
-
                             // get all txs of a single block
                             let mut i = 0;
                             println!("visiting long chain tx");
+
                             for block_hash in blockchain_mtx.all_blocks_in_longest_chain() {
                                 let block = blockchain_mtx.get(block_hash);
                                 let content = block.content.content;
                                 let len = content.len();
-                                // res.push("hello");
+
                                 // tmp Vec to record hashes of txs in a block
                                 let mut tmp = Vec::new();
-                                // tmp.push(len);
                                 for i in 0..len {
-                                    // tmp.push(1231343);
-                                    // tmp.push(len);
                                     tmp.push(content[i].hash().to_string());
                                 }
                                 i += 1;

@@ -4,7 +4,7 @@ use super::server::Handle as ServerHandle;
 use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
-use crate::types::transaction::{Mempool, Transaction, SignedTransaction, verify};
+use crate::types::transaction::{verify, Mempool, SignedTransaction, Transaction};
 use std::collections::HashMap;
 use std::convert::TryInto;
 
@@ -13,7 +13,7 @@ use std::convert::TryInto;
 use log::{debug, error, warn};
 use ring::signature;
 use std::sync::{Arc, Mutex};
-use std::{thread, mem, clone};
+use std::{clone, mem, thread};
 
 #[cfg(any(test, test_utilities))]
 use super::peer::TestReceiver as PeerTestReceiver;
@@ -27,7 +27,6 @@ pub struct Worker {
     blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
     buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
     orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>,
-    // mempool: Arc<Mutex<Mempool>>,
 }
 
 impl Worker {
@@ -37,8 +36,7 @@ impl Worker {
         server: &ServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>,
         buffer: &Arc<Mutex<HashMap<H256, Block>>>,
-        orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>, 
-        // mempool: &Arc<Mutex<Mempool>>,
+        orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>,
     ) -> Self {
         Self {
             msg_chan: msg_src,
@@ -47,7 +45,6 @@ impl Worker {
             blockchain: Arc::clone(blockchain),
             buffer: Arc::clone(buffer),
             orphan_buffer: Arc::clone(orphan_buffer),
-            // mempool: Arc::clone(mempool)
         }
     }
 
@@ -116,11 +113,11 @@ impl Worker {
 
                     for block in blocks.iter() {
                         // judge if the block already exists in the block chain
-                        if locked_blockchian.blocks.contains_key(&block.hash()){
+                        if locked_blockchian.blocks.contains_key(&block.hash()) {
                             continue;
                         }
                         // judge if not parent already exists, then add current block into buffer
-                        if !locked_blockchian.blocks.contains_key(&block.header.parent){
+                        if !locked_blockchian.blocks.contains_key(&block.header.parent) {
                             unseen.push(block.header.parent);
                             // structure in orphan_buffer:
                             // key : H256 of parent, value : block of child
@@ -132,20 +129,25 @@ impl Worker {
                             tmp_difficulty[0] = 0u8;
                             // tmp_difficulty[1] = 0u8;
                             // tmp_difficulty[2] = 63u8;
-                            let root_diff:H256 = tmp_difficulty.into();
+                            let root_diff: H256 = tmp_difficulty.into();
                             // let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
-                            if block.hash() < block.header.difficulty && block.header.difficulty == root_diff{
+                            if block.hash() < block.header.difficulty
+                                && block.header.difficulty == root_diff
+                            {
                                 // add current block into chain
                                 locked_blockchian.insert(block);
                                 new_block_hashes.push(block.hash());
                                 // search childs in the buffer and add them into chain iterately.
                                 let mut parent_hash = block.hash();
 
-                                while locked_orphan_buffer.contains_key(&parent_hash){
+                                while locked_orphan_buffer.contains_key(&parent_hash) {
                                     // child block of parent_hash
-                                    let child_block = locked_orphan_buffer.remove(&parent_hash).unwrap();
+                                    let child_block =
+                                        locked_orphan_buffer.remove(&parent_hash).unwrap();
                                     // POV validation
-                                    if child_block.header.difficulty == root_diff && child_block.header.difficulty > child_block.hash(){
+                                    if child_block.header.difficulty == root_diff
+                                        && child_block.header.difficulty > child_block.hash()
+                                    {
                                         // add child block
                                         locked_blockchian.insert(&child_block);
                                         new_block_hashes.push(child_block.hash());
@@ -155,15 +157,14 @@ impl Worker {
                                 }
                             }
                         }
-                        
                     }
-                    if new_block_hashes.len() > 0{
-                        self.server.broadcast(Message::NewBlockHashes(new_block_hashes.clone()));
+                    if new_block_hashes.len() > 0 {
+                        self.server
+                            .broadcast(Message::NewBlockHashes(new_block_hashes.clone()));
                     }
                     if unseen.len() > 0 {
                         self.server.broadcast(Message::GetBlocks(unseen.clone()));
                     }
-
 
                     // let mut new_blocks: Vec<H256> = Vec::new();
                     // let mut buffer_parents: Vec<H256> = Vec::new();
@@ -195,7 +196,7 @@ impl Worker {
                     // vector to store transaction not included in mempool
                     let mut transactions_new = Vec::new();
                     for hash in hashes.iter() {
-                        if !mempool_mutex.tx_map.contains_key(hash){
+                        if !mempool_mutex.tx_map.contains_key(hash) {
                             transactions_new.push(hash.clone());
                         }
                     }
@@ -213,7 +214,7 @@ impl Worker {
 
                     // let mut map = mempool_mutex.tx_map;
                     for hash in hashes.iter() {
-                        if mempool_mutex.tx_map.contains_key(hash){
+                        if mempool_mutex.tx_map.contains_key(hash) {
                             transactions.push(mempool_mutex.tx_map[hash].clone());
                         }
                     }
@@ -230,26 +231,32 @@ impl Worker {
                     let mut transactions_new = Vec::new();
 
                     for tx in signedtransactions {
-                        
                         let t_hash = tx.hash();
                         let public_key_tx = tx.public_key;
                         let signature_tx = tx.signature;
                         let transaction = tx.transcation;
+
                         // verify with the publickey
                         // if !verify(&transaction, &public_key_tx, &signature_tx){
                         //     continue;
                         // }
+
                         // add check here
-                        if !mempool_mutex.tx_map.contains_key(&t_hash){
+                        if !mempool_mutex.tx_map.contains_key(&t_hash) {
                             let clone_tx = transaction.clone();
-                            let clone_signed_tx = SignedTransaction{public_key: public_key_tx.clone(), signature: signature_tx.clone(), transcation: clone_tx};
+                            let clone_signed_tx = SignedTransaction {
+                                public_key: public_key_tx.clone(),
+                                signature: signature_tx.clone(),
+                                transcation: clone_tx,
+                            };
                             mempool_mutex.insert(&clone_signed_tx);
                             // println!("adding new txs in mempool");
                             transactions_new.push(t_hash);
                         }
                     }
                     if transactions_new.len() > 0 {
-                        self.server.broadcast(Message::NewTransactionHashes(transactions_new));
+                        self.server
+                            .broadcast(Message::NewTransactionHashes(transactions_new));
                         // println!("inserting some in mempool, tell others adding some new txs");
                     }
                     drop(mempool_mutex);

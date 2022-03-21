@@ -1,34 +1,33 @@
-
-use futures::AsyncWriteExt;
-use log::{debug, warn, info};
-use rand::distributions::Open01;
-use crate::network::peer;
-use crate::types::hash::{H256, Hashable, self, };
-use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
-use crate::types::transaction::{SignedTransaction, UTXO_output, UTXO_input, Transaction, Mempool, sign};
-use crate::types::address::{Address};
-use crate::blockchain::{Blockchain};
-use std::thread;
-use std::sync::{Arc, Mutex};
-use crate::network::server::Handle as ServerHandle;
-use crate::network::message::{Message};
-use std::time;
-
-use ring::digest;
-use ring::signature::{self, Ed25519KeyPair, Signature, KeyPair, VerificationAlgorithm, EdDSAParameters};
-
-use rand::Rng;
-use rand::seq::SliceRandom;
-
 use super::block::{self, Block};
+use crate::blockchain::Blockchain;
+use crate::network::message::Message;
+use crate::network::peer;
+use crate::network::server::Handle as ServerHandle;
+use crate::types::address::Address;
+use crate::types::hash::{self, Hashable, H256};
+use crate::types::transaction::{
+    sign, Mempool, SignedTransaction, Transaction, UTXO_input, UTXO_output,
+};
+use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
+use futures::AsyncWriteExt;
+use log::{debug, info, warn};
+use rand::distributions::Open01;
+use rand::seq::SliceRandom;
+use rand::Rng;
+use ring::digest;
+use ring::signature::{
+    self, Ed25519KeyPair, EdDSAParameters, KeyPair, Signature, VerificationAlgorithm,
+};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time;
 
 // enum class that supports message in channel
 enum ControlSignal {
     Start(u64), // the number controls the theta of interval between block generation
-    Update, // change name Gen to Update
+    Update,     // change name Gen to Update
     Exit,
 }
-
 
 enum OperatingState {
     Paused,
@@ -36,15 +35,12 @@ enum OperatingState {
     ShutDown,
 }
 
-
 pub struct Context {
     /// Channel for receiving control signal
     control_chan: Receiver<ControlSignal>,
     operating_state: OperatingState,
-    // finished_block_chan: Sender<Block>,
-    // sender_chan: Sender<SignedTransaction>,
     server: ServerHandle,
-    blockchain: Arc<Mutex<Blockchain>>, 
+    blockchain: Arc<Mutex<Blockchain>>,
 }
 
 #[derive(Clone)]
@@ -53,22 +49,15 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new(
-    server: &ServerHandle,
-    blockchain: &Arc<Mutex<Blockchain>>, 
-) -> (Context, Handle) {
+pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle) {
     // bound receiver and sender to comunication in channels
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
-    // let (txs_chan_sender, txs_chan_receiver) = unbounded();
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
-        // sender_chan: txs_chan_sender,
         server: server.clone(),
         blockchain: blockchain.clone(),
-        // mempool: Arc::clone(mempool),
     };
-
     let handle = Handle {
         control_chan: signal_chan_sender,
     };
@@ -82,9 +71,7 @@ impl Handle {
     }
 
     pub fn start(&self, theta: u64) {
-        self.control_chan
-            .send(ControlSignal::Start(theta))
-            .unwrap();
+        self.control_chan.send(ControlSignal::Start(theta)).unwrap();
     }
 
     pub fn update(&self) {
@@ -95,30 +82,25 @@ impl Handle {
 impl Context {
     pub fn start(mut self) {
         thread::Builder::new()
-        .name("transaction_gene".to_string())
-        .spawn(move || {
-            self.generator_loop();
-        })
-        .unwrap();
+            .name("transaction_gene".to_string())
+            .spawn(move || {
+                self.generator_loop();
+            })
+            .unwrap();
         info!("generator initialized into paused mode");
     }
 
     fn generator_loop(&mut self) {
-
+        use crate::types::{address, key_pair};
         use std::{convert::TryInto, ops::Add};
-        use crate::types::{key_pair, address};
+
         // On startup, insert and ICO for yourself into the mempool
         info!("Executing ICO - Generating Sourceless TX");
-
-        
-
 
         // Share ICO TX with others - they likely won't mine it, but should have it on hand
         // let signed_tx_hash: H256 = signed_tx.hash();
         // self.server.broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
-
         loop {
-            
             // print!("matching state");
             match self.operating_state {
                 OperatingState::Paused => {
@@ -160,7 +142,7 @@ impl Context {
                     }
                     Err(TryRecvError::Empty) => {}
                     Err(TryRecvError::Disconnected) => panic!("Generator control channel detached"),
-                },        
+                },
             }
             if let OperatingState::ShutDown = self.operating_state {
                 return;
@@ -168,8 +150,8 @@ impl Context {
             let blockchain_mtx = self.blockchain.lock().unwrap();
             let mut mempool_locked = blockchain_mtx.mempool.lock().unwrap();
             // println!("Generate a transaction, size of mempool 0 {}", mempool_locked.deque.len());
+            use crate::types::{address, key_pair};
             use std::{convert::TryInto, ops::Add};
-            use crate::types::{key_pair, address};
             // assemble a fake transaction
             let mut rng = rand::thread_rng();
             let mut sender = Vec::<u8>::with_capacity(20);
@@ -183,12 +165,18 @@ impl Context {
             // assemble utxo_out, random
             let fake_address = Address::new(address_array);
             let value: u64 = rng.gen();
-            let fake_utxo_out = UTXO_output{receipient_address: fake_address, value: value};
+            let fake_utxo_out = UTXO_output {
+                receipient_address: fake_address,
+                value: value,
+            };
             // assemble utxo_input random
             let rand_num: u8 = rng.gen();
             let previous_output: H256 = [rand_num; 32].into();
             let index: u8 = rng.gen();
-            let fake_utxo_in = UTXO_input { prev_tx_hash: previous_output, index: index };
+            let fake_utxo_in = UTXO_input {
+                prev_tx_hash: previous_output,
+                index: index,
+            };
 
             let utxo_in_vec = vec![fake_utxo_in];
             let utxo_out_vec = vec![fake_utxo_out];
@@ -207,17 +195,23 @@ impl Context {
             let key = key_pair::random();
             let signature = sign(&transc, &key);
             // assemble to a signedtransaction
-            let signed_tx = SignedTransaction{public_key: key.public_key().as_ref().to_vec(), signature: signature.as_ref().to_vec(), transcation: transc};
+            let signed_tx = SignedTransaction {
+                public_key: key.public_key().as_ref().to_vec(),
+                signature: signature.as_ref().to_vec(),
+                transcation: transc,
+            };
             // add assembled random signedtransaction into mempool
             // println!("mempool size {}", mempool_locked.deque.len());
-            println!("Generate a transaction, size of mempool 1 {}", mempool_locked.deque.len());
+            println!(
+                "Generate a transaction, size of mempool 1 {}",
+                mempool_locked.deque.len()
+            );
             mempool_locked.insert(&signed_tx);
             let signed_tx_hash: H256 = signed_tx.hash();
             // broadcast new signedtx inserted
             // println!("new_transaction hash");
-            // peer.write(Message::NewTransactionHashes(vec![signed_tx_hash]);
-            self.server.broadcast(Message::Transactions(vec![signed_tx]));
-            // self.server.broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
+            self.server
+                .broadcast(Message::Transactions(vec![signed_tx]));
             drop(mempool_locked);
             drop(blockchain_mtx);
             if let OperatingState::Run(i) = self.operating_state {
@@ -226,12 +220,10 @@ impl Context {
                     thread::sleep(interval);
                 }
             }
-            
+
             // println!("Generate a transaction, size of mempool 2 {}", mempool_locked.deque.len());
-            
             // println!("Generate a transaction, size of map {}", mempool_locked.tx_map.len());
             // thread::sleep(time::Duration::from_millis(1000));
-            
         }
     }
 }

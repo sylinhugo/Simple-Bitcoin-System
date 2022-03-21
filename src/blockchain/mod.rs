@@ -1,5 +1,3 @@
-
-
 use crate::types::block::{Block, BlockContent, BlockHeader};
 use crate::types::hash::{Hashable, H256};
 use crate::types::merkle::MerkleTree;
@@ -94,7 +92,7 @@ impl Blockchain {
         return self.tip;
     }
 
-    pub fn get(&self, hash :H256) -> Block{
+    pub fn get(&self, hash: H256) -> Block {
         return self.blocks[&hash].clone();
     }
 
