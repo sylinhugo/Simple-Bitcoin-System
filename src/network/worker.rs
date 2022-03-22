@@ -4,13 +4,16 @@ use super::server::Handle as ServerHandle;
 use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
+use crate::types::transaction::{verify, Mempool, SignedTransaction, Transaction};
 use std::collections::HashMap;
+use std::convert::TryInto;
 
-use futures::executor::block_on;
-use futures::lock;
+// use futures::executor::block_on;
+// use futures::lock;
 use log::{debug, error, warn};
+use ring::signature;
 use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{clone, mem, thread};
 
 #[cfg(any(test, test_utilities))]
 use super::peer::TestReceiver as PeerTestReceiver;
@@ -23,8 +26,7 @@ pub struct Worker {
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
     buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
-    orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>
-
+    orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>,
 }
 
 impl Worker {
@@ -34,7 +36,7 @@ impl Worker {
         server: &ServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>,
         buffer: &Arc<Mutex<HashMap<H256, Block>>>,
-        orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>, 
+        orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>,
     ) -> Self {
         Self {
             msg_chan: msg_src,
@@ -111,11 +113,11 @@ impl Worker {
 
                     for block in blocks.iter() {
                         // judge if the block already exists in the block chain
-                        if locked_blockchian.blocks.contains_key(&block.hash()){
+                        if locked_blockchian.blocks.contains_key(&block.hash()) {
                             continue;
                         }
                         // judge if not parent already exists, then add current block into buffer
-                        if !locked_blockchian.blocks.contains_key(&block.header.parent){
+                        if !locked_blockchian.blocks.contains_key(&block.header.parent) {
                             unseen.push(block.header.parent);
                             // structure in orphan_buffer:
                             // key : H256 of parent, value : block of child
@@ -123,19 +125,29 @@ impl Worker {
                         }
                         // parent exists, check from the buffer
                         else {
-                            let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
-                            if block.hash() < block.header.difficulty && root_diff == block.header.difficulty{
+                            let mut tmp_difficulty = [255u8; 32];
+                            tmp_difficulty[0] = 0u8;
+                            // tmp_difficulty[1] = 0u8;
+                            // tmp_difficulty[2] = 63u8;
+                            let root_diff: H256 = tmp_difficulty.into();
+                            // let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
+                            if block.hash() < block.header.difficulty
+                                && block.header.difficulty == root_diff
+                            {
                                 // add current block into chain
                                 locked_blockchian.insert(block);
                                 new_block_hashes.push(block.hash());
                                 // search childs in the buffer and add them into chain iterately.
                                 let mut parent_hash = block.hash();
 
-                                while locked_orphan_buffer.contains_key(&parent_hash){
+                                while locked_orphan_buffer.contains_key(&parent_hash) {
                                     // child block of parent_hash
-                                    let child_block = locked_orphan_buffer.remove(&parent_hash).unwrap();
+                                    let child_block =
+                                        locked_orphan_buffer.remove(&parent_hash).unwrap();
                                     // POV validation
-                                    if child_block.header.difficulty == root_diff && child_block.header.difficulty > child_block.hash(){
+                                    if child_block.header.difficulty == root_diff
+                                        && child_block.header.difficulty > child_block.hash()
+                                    {
                                         // add child block
                                         locked_blockchian.insert(&child_block);
                                         new_block_hashes.push(child_block.hash());
@@ -145,50 +157,114 @@ impl Worker {
                                 }
                             }
                         }
-                        
                     }
-                    if new_block_hashes.len() > 0{
-                        self.server.broadcast(Message::NewBlockHashes(new_block_hashes.clone()));
-                    }
-                    // if unseen.len() > 0 {
-                    //     self.server.broadcast(Message::GetBlocks(unseen.clone()));
-                    // }
-
-
-                    let mut new_blocks: Vec<H256> = Vec::new();
-                    let mut buffer_parents: Vec<H256> = Vec::new();
-
-                    for block in blocks.iter() {
-                        // If the block isn't inside blockchain, then we can try to insert it
-                        // Or, we just pass it
-                        if !(locked_blockchian.blocks.contains_key(&block.hash())) {
-                            // If block's parent isn't inside the blockchain,
-                            // then we need to wait until block's parent be added in.
-                            if locked_blockchian.blocks.contains_key(&block.header.parent) {
-                                locked_blockchian.insert(block);
-                                new_blocks.push(block.hash());
-                            } else {
-                                locked_bffer.insert(block.header.parent, block.clone());
-                                buffer_parents.push(block.header.parent.clone());
-                                peer.write(Message::GetBlocks(buffer_parents.clone()));
-                            }
-                        }
-                    }
-                    if new_blocks.len() > 0 {
+                    if new_block_hashes.len() > 0 {
                         self.server
-                            .broadcast(Message::NewBlockHashes(new_blocks.clone()));
+                            .broadcast(Message::NewBlockHashes(new_block_hashes.clone()));
                     }
+                    if unseen.len() > 0 {
+                        self.server.broadcast(Message::GetBlocks(unseen.clone()));
+                    }
+
+                    // let mut new_blocks: Vec<H256> = Vec::new();
+                    // let mut buffer_parents: Vec<H256> = Vec::new();
+
+                    // for block in blocks.iter() {
+                    //     // If the block isn't inside blockchain, then we can try to insert it
+                    //     // Or, we just pass it
+                    //     if !(locked_blockchian.blocks.contains_key(&block.hash())) {
+                    //         // If block's parent isn't inside the blockchain,
+                    //         // then we need to wait until block's parent be added in.
+                    //         if locked_blockchian.blocks.contains_key(&block.header.parent) {
+                    //             locked_blockchian.insert(block);
+                    //             new_blocks.push(block.hash());
+                    //         } else {
+                    //             locked_bffer.insert(block.header.parent, block.clone());
+                    //             buffer_parents.push(block.header.parent.clone());
+                    //             peer.write(Message::GetBlocks(buffer_parents.clone()));
+                    //         }
+                    //     }
+                    // }
+                    // if new_blocks.len() > 0 {
+                    //     self.server
+                    //         .broadcast(Message::NewBlockHashes(new_blocks.clone()));
+                    // }
                 }
                 Message::NewTransactionHashes(hashes) => {
-                    unimplemented!();
+                    println!("receive req new txs");
+                    let mempool_mutex = locked_blockchian.mempool.lock().unwrap();
+                    // vector to store transaction not included in mempool
+                    let mut transactions_new = Vec::new();
+                    for hash in hashes.iter() {
+                        if !mempool_mutex.tx_map.contains_key(hash) {
+                            transactions_new.push(hash.clone());
+                        }
+                    }
+                    if transactions_new.len() > 0 {
+                        peer.write(Message::GetTransactions(transactions_new));
+                        // println!("request new txs");
+                    }
+                    drop(mempool_mutex);
                 }
                 Message::GetTransactions(hashes) => {
-                    unimplemented!();
+                    // println!("receive req get txs");
+                    let mempool_mutex = locked_blockchian.mempool.lock().unwrap();
+                    // vector to store requested blocks
+                    let mut transactions = Vec::new();
+
+                    // let mut map = mempool_mutex.tx_map;
+                    for hash in hashes.iter() {
+                        if mempool_mutex.tx_map.contains_key(hash) {
+                            transactions.push(mempool_mutex.tx_map[hash].clone());
+                        }
+                    }
+                    if transactions.len() > 0 {
+                        peer.write(Message::Transactions(transactions));
+                        // println!("return all txs that are requested");
+                    }
+                    drop(mempool_mutex);
                 }
-                Message::Transactions(transactions) => {
-                    unimplemented!();
+                Message::Transactions(signedtransactions) => {
+                    // println!("receive req txs");
+                    let mut mempool_mutex = locked_blockchian.mempool.lock().unwrap();
+
+                    let mut transactions_new = Vec::new();
+
+                    for tx in signedtransactions {
+                        let t_hash = tx.hash();
+                        let public_key_tx = tx.public_key;
+                        let signature_tx = tx.signature;
+                        let transaction = tx.transcation;
+
+                        // verify with the publickey
+                        if !verify(&transaction, &public_key_tx, &signature_tx){
+                            continue;
+                        }
+
+                        // add check here
+                        if !mempool_mutex.tx_map.contains_key(&t_hash) {
+                            let clone_tx = transaction.clone();
+                            let clone_signed_tx = SignedTransaction {
+                                public_key: public_key_tx.clone(),
+                                signature: signature_tx.clone(),
+                                transcation: clone_tx,
+                            };
+                            mempool_mutex.insert(&clone_signed_tx);
+                            // println!("adding new txs in mempool");
+                            transactions_new.push(t_hash);
+                        }
+                    }
+                    if transactions_new.len() > 0 {
+                        self.server
+                            .broadcast(Message::NewTransactionHashes(transactions_new));
+                        // println!("inserting some in mempool, tell others adding some new txs");
+                    }
+                    drop(mempool_mutex);
                 }
             }
+            drop(locked_blockchian);
+            drop(locked_bffer);
+            drop(locked_orphan_buffer);
         }
     }
 }
@@ -226,6 +302,8 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
     let buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_buffer));
     let fake_orphan_buffer = HashMap::new();
     let orphan_buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_orphan_buffer));
+    let fake_mempool = Mempool::new();
+    let mempool: Arc<Mutex<Mempool>> = Arc::new(Mutex::new(fake_mempool));
     let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer, &orphan_buffer);
     worker.start();
 

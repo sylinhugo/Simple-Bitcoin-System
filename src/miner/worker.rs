@@ -54,6 +54,7 @@ impl Worker {
             let mut blk_hashes = Vec::new();
             blk_hashes.push(_block.hash());
             self.server.broadcast(Message::NewBlockHashes(blk_hashes));
+            drop(new_blockchain);
         }
     }
 }

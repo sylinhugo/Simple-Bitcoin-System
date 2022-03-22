@@ -14,6 +14,7 @@ use crate::types::block::BlockHeader;
 use crate::types::hash::Hashable;
 use crate::types::hash::H256;
 use crate::types::merkle::MerkleTree;
+use crate::types::transaction::Mempool;
 use crate::types::transaction::SignedTransaction;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -37,6 +38,7 @@ pub struct Context {
     finished_block_chan: Sender<Block>,
     blockchain: Arc<Mutex<Blockchain>>, // midterm2, according to document, implement this type
     tip: H256, // midterm2, the reason why add this part is from the discusssion on piazza
+    mempool: Arc<Mutex<Mempool>>, // mempool for midproject5
 }
 
 #[derive(Clone)]
@@ -48,13 +50,14 @@ pub struct Handle {
 pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Block>) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
-
+    let fake_mempool = Mempool::new();
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
         blockchain: Arc::clone(blockchain),    // midterm2 added
         tip: blockchain.lock().unwrap().tip(), // midterm2 added
+        mempool: Arc::new(Mutex::new(fake_mempool.clone())),
     };
 
     let handle = Handle {
@@ -69,6 +72,8 @@ pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Bl
 fn test_new() -> (Context, Handle, Receiver<Block>) {
     let fake_blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(fake_blockchain));
+    let fake_mempool = Mempool::new();
+    let mempool = Arc::new(Mutex::new(fake_mempool));
     new(&blockchain)
 }
 
@@ -167,10 +172,11 @@ impl Context {
             let mut rng = rand::thread_rng();
             let block_nonce: u32 = rng.gen();
             // let block_difficulty = blockchain.blocks[&block_parent].header.difficulty;
+            // adjust the difficulty to modify mining speed
             let mut tmp_difficulty = [255u8; 32];
             tmp_difficulty[0] = 0u8;
-            tmp_difficulty[1] = 0u8;
-            tmp_difficulty[2] = 63u8;
+            // tmp_difficulty[1] = 0u8;
+            // tmp_difficulty[2] = 63u8;
             let block_difficulty = tmp_difficulty.into();
 
             let block_timestamp = SystemTime::now()
@@ -178,8 +184,14 @@ impl Context {
                 .unwrap()
                 .as_millis();
 
-            let fake_transcation: Vec<SignedTransaction> = Vec::new();
-            let merklt_tree = MerkleTree::new(&fake_transcation);
+            //
+            let mut mempool_mutex = blockchain.mempool.lock().unwrap();
+            let mut packed_transcation: Vec<SignedTransaction> = Vec::new();
+
+            let top_txs = mempool_mutex.get_headtransactions(); // first 20 transaction to assemble merkle tree
+
+            // print!("The number is {}", mempool_mutex.deque.len());
+            let merklt_tree = MerkleTree::new(&top_txs);
 
             let block_header = BlockHeader {
                 parent: block_parent,
@@ -188,29 +200,42 @@ impl Context {
                 timestamp: block_timestamp,
                 merkle_root: merklt_tree.root(),
             };
-            let block_content = BlockContent {
-                content: fake_transcation,
-            };
-            let new_block = Block {
-                header: block_header,
-                content: block_content,
-            };
 
-            if new_block.hash() <= new_block.header.difficulty {
+            if block_header.hash() <= block_difficulty {
+                for i in 0..20 {
+                    // if mempool not empty, pop values from mempool
+                    if !mempool_mutex.deque.is_empty() {
+                        let first_hash = mempool_mutex.deque.pop_front().unwrap();
+                        let first_tx = mempool_mutex.tx_map.remove(&first_hash).unwrap();
+                        packed_transcation.push(first_tx.clone());
+                    } else {
+                        break;
+                    }
+                }
+
+                let block_content = BlockContent { content: top_txs };
+                let new_block = Block {
+                    header: block_header,
+                    content: block_content,
+                };
+
                 self.finished_block_chan
                     .send(new_block.clone())
                     .expect("Send finished block error");
 
                 // block_parent = new_block.hash();     // this will not work, failed to pass miner_three_block() case
                 self.tip = new_block.hash();
+                print!("mining a new block is {}", 1);
             }
-
+            // print!("test for mining a new block");
             if let OperatingState::Run(i) = self.operating_state {
                 if i != 0 {
                     let interval = time::Duration::from_micros(i as u64);
                     thread::sleep(interval);
                 }
             }
+            drop(mempool_mutex);
+            drop(blockchain);
         }
     }
 }

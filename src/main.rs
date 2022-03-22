@@ -12,13 +12,17 @@ use api::Server as ApiServer;
 use blockchain::Blockchain;
 use clap::clap_app;
 use log::{error, info};
+use serde::__private::ser;
 use smol::channel;
 use std::collections::HashMap;
 use std::net;
+use std::ops::RangeBounds;
 use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
+use types::transaction::Mempool;
+use types::transaction_generate;
 
 fn main() {
     // parse command line arguments
@@ -42,6 +46,7 @@ fn main() {
     // proj3 added
     let buffer = Arc::new(Mutex::new(HashMap::new()));
     let orphan_buffer = Arc::new(Mutex::new(HashMap::new()));
+
     // parse p2p server address
     let p2p_addr = matches
         .value_of("peer_addr")
@@ -69,9 +74,6 @@ fn main() {
     let (server_ctx, server) = network::server::new(p2p_addr, msg_tx).unwrap();
     server_ctx.start().unwrap();
 
-    // According to midterm2, we need to declare new blockchain object
-    let _blockchain = Arc::new(Mutex::new(blockchain::Blockchain::new()));
-
     // start the worker
     let p2p_workers = matches
         .value_of("p2p_workers")
@@ -81,18 +83,25 @@ fn main() {
             error!("Error parsing P2P workers: {}", e);
             process::exit(1);
         });
-    let worker_ctx =
-        network::worker::Worker::new(p2p_workers, msg_rx, &server, &blockchain, &buffer, &orphan_buffer);
+    let worker_ctx = network::worker::Worker::new(
+        p2p_workers,
+        msg_rx,
+        &server,
+        &blockchain,
+        &buffer,
+        &orphan_buffer,
+    );
     worker_ctx.start();
 
-    // ------------------------
+    // responsible for generate random transactions
+    let (txs_generator_ctx, txs_generator) = transaction_generate::new(&server, &blockchain);
+    txs_generator_ctx.start();
+
     // start the miner
-    // According to midterm2, we need to do some modifications
     let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain);
     let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan, &blockchain);
     miner_ctx.start();
     miner_worker_ctx.start();
-    // ------------------------
 
     // connect to known peers
     if let Some(known_peers) = matches.values_of("known_peer") {
@@ -128,8 +137,8 @@ fn main() {
     }
 
     // start the API server
-    ApiServer::start(api_addr, &miner, &server, &blockchain);
-
+    ApiServer::start(api_addr, &miner, &server, &blockchain, &txs_generator);
+    // debug!("test");
     loop {
         std::thread::park();
     }

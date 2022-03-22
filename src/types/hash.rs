@@ -108,6 +108,13 @@ impl PartialOrd for H256 {
         Some(self.cmp(other))
     }
 }
+impl H256 {
+    pub fn to_addr(&self) -> [u8; 20] {
+        self.0[12..32].try_into().unwrap()
+    }
+}
+
+
 
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_hash() -> H256 {
