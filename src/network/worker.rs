@@ -237,9 +237,9 @@ impl Worker {
                         let transaction = tx.transcation;
 
                         // verify with the publickey
-                        // if !verify(&transaction, &public_key_tx, &signature_tx){
-                        //     continue;
-                        // }
+                        if !verify(&transaction, &public_key_tx, &signature_tx){
+                            continue;
+                        }
 
                         // add check here
                         if !mempool_mutex.tx_map.contains_key(&t_hash) {
