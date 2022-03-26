@@ -204,7 +204,7 @@ impl Worker {
                         peer.write(Message::GetTransactions(transactions_new));
                         // println!("request new txs");
                     }
-                    drop(mempool_mutex);
+                    // drop(mempool_mutex);
                 }
                 Message::GetTransactions(hashes) => {
                     // println!("receive req get txs");
@@ -222,7 +222,7 @@ impl Worker {
                         peer.write(Message::Transactions(transactions));
                         // println!("return all txs that are requested");
                     }
-                    drop(mempool_mutex);
+                    // drop(mempool_mutex);
                 }
                 Message::Transactions(signedtransactions) => {
                     // println!("receive req txs");
@@ -237,7 +237,7 @@ impl Worker {
                         let transaction = tx.transcation;
 
                         // verify with the publickey
-                        if !verify(&transaction, &public_key_tx, &signature_tx){
+                        if !verify(&transaction, &public_key_tx, &signature_tx) {
                             continue;
                         }
 
@@ -259,12 +259,12 @@ impl Worker {
                             .broadcast(Message::NewTransactionHashes(transactions_new));
                         // println!("inserting some in mempool, tell others adding some new txs");
                     }
-                    drop(mempool_mutex);
+                    // drop(mempool_mutex);
                 }
             }
-            drop(locked_blockchian);
-            drop(locked_bffer);
-            drop(locked_orphan_buffer);
+            // drop(locked_blockchian);
+            // drop(locked_bffer);
+            // drop(locked_orphan_buffer);
         }
     }
 }

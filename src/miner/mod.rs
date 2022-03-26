@@ -38,7 +38,7 @@ pub struct Context {
     finished_block_chan: Sender<Block>,
     blockchain: Arc<Mutex<Blockchain>>, // midterm2, according to document, implement this type
     tip: H256, // midterm2, the reason why add this part is from the discusssion on piazza
-    mempool: Arc<Mutex<Mempool>>, // mempool for midproject5
+               // mempool: Arc<Mutex<Mempool>>, // mempool for midproject5
 }
 
 #[derive(Clone)]
@@ -50,14 +50,14 @@ pub struct Handle {
 pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Block>) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
-    let fake_mempool = Mempool::new();
+    // let fake_mempool = Mempool::new();
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
-        blockchain: Arc::clone(blockchain),    // midterm2 added
+        blockchain: Arc::clone(blockchain), // midterm2 added
         tip: blockchain.lock().unwrap().tip(), // midterm2 added
-        mempool: Arc::new(Mutex::new(fake_mempool.clone())),
+                                            // mempool: Arc::new(Mutex::new(fake_mempool.clone())),
     };
 
     let handle = Handle {
@@ -234,8 +234,8 @@ impl Context {
                     thread::sleep(interval);
                 }
             }
-            drop(mempool_mutex);
-            drop(blockchain);
+            // drop(mempool_mutex);
+            // drop(blockchain);
         }
     }
 }

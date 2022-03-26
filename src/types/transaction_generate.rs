@@ -211,7 +211,9 @@ impl Context {
             // broadcast new signedtx inserted
             // println!("new_transaction hash");
             self.server
-                .broadcast(Message::Transactions(vec![signed_tx]));
+                .broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
+            // self.server
+            //     .broadcast(Message::Transactions(vec![signed_tx]));
             drop(mempool_locked);
             drop(blockchain_mtx);
             if let OperatingState::Run(i) = self.operating_state {

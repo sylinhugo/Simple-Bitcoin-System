@@ -148,7 +148,7 @@ impl Server {
                             let v_string: Vec<String> =
                                 v.into_iter().map(|h| h.to_string()).collect();
                             println!("test4");
-                            drop(blockchain);
+                            // drop(blockchain);
                             respond_json!(req, v_string);
                         }
                         "/blockchain/longest-chain-tx" => {
@@ -171,7 +171,7 @@ impl Server {
                                 i += 1;
                                 res.push(tmp);
                             }
-                            drop(blockchain_mtx);
+                            // drop(blockchain_mtx);
                             println!("how many blocks in chain {}", i);
                             respond_json!(req, res);
                             // respond_result!(req, true, "ok");
