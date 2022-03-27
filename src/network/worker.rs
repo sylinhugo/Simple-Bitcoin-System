@@ -4,7 +4,7 @@ use super::server::Handle as ServerHandle;
 use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
-use crate::types::transaction::{verify, Mempool, SignedTransaction, Transaction};
+use crate::types::transaction::{verify, SignedTransaction, State, StatePerBlock};
 use std::collections::HashMap;
 use std::convert::TryInto;
 
@@ -27,6 +27,7 @@ pub struct Worker {
     blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
     buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
     orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>,
+    state_per_block: Arc<Mutex<StatePerBlock>>,
 }
 
 impl Worker {
@@ -37,6 +38,7 @@ impl Worker {
         blockchain: &Arc<Mutex<Blockchain>>,
         buffer: &Arc<Mutex<HashMap<H256, Block>>>,
         orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>,
+        state_per_block: &Arc<Mutex<StatePerBlock>>,
     ) -> Self {
         Self {
             msg_chan: msg_src,
@@ -45,6 +47,7 @@ impl Worker {
             blockchain: Arc::clone(blockchain),
             buffer: Arc::clone(buffer),
             orphan_buffer: Arc::clone(orphan_buffer),
+            state_per_block: Arc::clone(state_per_block),
         }
     }
 
@@ -134,8 +137,34 @@ impl Worker {
                             if block.hash() < block.header.difficulty
                                 && block.header.difficulty == root_diff
                             {
+                                //
+                                // avoid transaction repeat
+                                // let mut mempool_mutex = locked_blockchian.mempool.lock().unwrap();
+                                // let transactions = block.content.content.clone();
+
+                                let mut locked_state_per_block =
+                                    self.state_per_block.lock().unwrap();
+                                let mut state_newest = locked_state_per_block.state_block_map
+                                    [&locked_blockchian.tip]
+                                    .clone();
+
+                                // for tx in transactions {
+                                //     if (mempool_mutex.tx_map.contains_key(&tx.hash())) {
+                                //         mempool_mutex.remove(&tx);
+                                //     }
+                                // }
+                                // drop(mempool_mutex);
+
                                 // add current block into chain
                                 locked_blockchian.insert(block);
+                                for tx in block.content.content.clone() {
+                                    state_newest.update(&tx);
+                                }
+
+                                locked_state_per_block
+                                    .state_block_map
+                                    .insert(block.hash(), state_newest.clone());
+
                                 new_block_hashes.push(block.hash());
                                 // search childs in the buffer and add them into chain iterately.
                                 let mut parent_hash = block.hash();
@@ -150,14 +179,24 @@ impl Worker {
                                     {
                                         // add child block
                                         locked_blockchian.insert(&child_block);
+                                        // update state per block when a block is not orphan
+                                        let cloned_child = child_block.clone();
+                                        for tx in cloned_child.content.content {
+                                            state_newest.update(&tx);
+                                        }
+                                        locked_state_per_block
+                                            .state_block_map
+                                            .insert(child_block.hash(), state_newest.clone());
                                         new_block_hashes.push(child_block.hash());
                                     }
                                     // update parent hash for next iteration
                                     parent_hash = child_block.hash();
                                 }
+                                drop(locked_state_per_block);
                             }
                         }
                     }
+
                     if new_block_hashes.len() > 0 {
                         self.server
                             .broadcast(Message::NewBlockHashes(new_block_hashes.clone()));
@@ -302,9 +341,18 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
     let buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_buffer));
     let fake_orphan_buffer = HashMap::new();
     let orphan_buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_orphan_buffer));
-    let fake_mempool = Mempool::new();
-    let mempool: Arc<Mutex<Mempool>> = Arc::new(Mutex::new(fake_mempool));
-    let worker = Worker::new(1, msg_chan, &server, &blockchain, &buffer, &orphan_buffer);
+    let state_per_block = Arc::new(Mutex::new(StatePerBlock::new()));
+    // let fake_mempool = Mempool::new();
+    // let mempool: Arc<Mutex<Mempool>> = Arc::new(Mutex::new(fake_mempool));
+    let worker = Worker::new(
+        1,
+        msg_chan,
+        &server,
+        &blockchain,
+        &buffer,
+        &orphan_buffer,
+        &state_per_block,
+    );
     worker.start();
 
     let mut res: Vec<H256> = Vec::new();

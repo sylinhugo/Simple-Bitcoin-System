@@ -21,7 +21,7 @@ use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
-use types::transaction::Mempool;
+use types::transaction::{State, StatePerBlock};
 use types::transaction_generate;
 
 fn main() {
@@ -40,8 +40,31 @@ fn main() {
     // init logger
     let verbosity = matches.occurrences_of("verbose") as usize;
     stderrlog::new().verbosity(verbosity).init().unwrap();
+
     let blockchain = Blockchain::new();
+
+    println!(
+        "###########  tip of blockchain {}  ##########",
+        blockchain.tip
+    );
+    // thread::sleep(time::Duration::from_millis(20000));
+
+    let mut _states_p_b = StatePerBlock::new();
+    _states_p_b.initial_coin_offering(blockchain.tip);
+
     let blockchain = Arc::new(Mutex::new(blockchain));
+
+    let state_per_block = Arc::new(Mutex::new(_states_p_b));
+
+    let locked_bc = blockchain.lock().unwrap();
+    let locked_spb = state_per_block.lock().unwrap();
+    println!(
+        "######## the valuse inside is: {:?} ##########",
+        locked_spb.state_block_map[&locked_bc.tip()]
+    );
+    drop(locked_spb);
+    drop(locked_bc);
+    // thread::sleep(time::Duration::from_millis(20000));
 
     // proj3 added
     let buffer = Arc::new(Mutex::new(HashMap::new()));
@@ -90,6 +113,7 @@ fn main() {
         &blockchain,
         &buffer,
         &orphan_buffer,
+        &state_per_block,
     );
     worker_ctx.start();
 
@@ -98,7 +122,7 @@ fn main() {
     txs_generator_ctx.start();
 
     // start the miner
-    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain);
+    let (miner_ctx, miner, finished_block_chan) = miner::new(&blockchain, &state_per_block);
     let miner_worker_ctx = miner::worker::Worker::new(&server, finished_block_chan, &blockchain);
     miner_ctx.start();
     miner_worker_ctx.start();

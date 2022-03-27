@@ -1,6 +1,7 @@
 extern crate ring;
 
 use super::address::Address;
+use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
 use rand::Rng;
 use ring::digest::{self, Context, Digest, SHA256};
@@ -40,6 +41,88 @@ pub struct UTXO_input {
 pub struct UTXO_output {
     pub receipient_address: Address,
     pub value: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct State {
+    pub state_map: HashMap<(H256, u8), (u64, Address)>,
+}
+
+impl State {
+    pub fn new() -> Self {
+        let state_map = HashMap::new();
+
+        State {
+            state_map: state_map,
+        }
+    }
+
+    // According to the definition of state update in README
+    pub fn update(&mut self, signed_transaction: &SignedTransaction) {
+        let transcation = signed_transaction.transcation.clone();
+        for transcation_input in transcation.input {
+            self.state_map
+                .remove(&(transcation_input.prev_tx_hash, transcation_input.index));
+        }
+
+        let mut idx = 0;
+        for transcation_output in transcation.output {
+            let transcation_hash = signed_transaction.hash();
+            self.state_map.insert(
+                (transcation_hash, idx),
+                (
+                    transcation_output.value,
+                    transcation_output.receipient_address,
+                ),
+            );
+            idx += 1;
+        }
+    }
+}
+
+pub struct StatePerBlock {
+    pub state_block_map: HashMap<H256, State>,
+}
+
+impl StatePerBlock {
+    pub fn new() -> Self {
+        return StatePerBlock {
+            state_block_map: HashMap::new(),
+        };
+    }
+
+    // NOT SURE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    pub fn initial_coin_offering(&mut self, h: H256) {
+        let mut ico_state = State::new();
+
+        let mut rng = rand::thread_rng();
+        let index: u8 = rng.gen();
+        let value: u64 = rng.gen();
+        let mut address_array = [0u8; 20];
+        for i in 0..20 {
+            address_array[i] = rng.gen();
+        }
+        let fake_address = Address::new(address_array);
+        let rand_num: u8 = rng.gen();
+        let previous_output: H256 = [rand_num; 32].into();
+
+        ico_state
+            .state_map
+            .insert((previous_output, index), (value, fake_address));
+
+        self.state_block_map.insert(h, ico_state);
+    }
+
+    pub fn update(&mut self, tip: H256, block: &Block) {
+        let mut newest_state = self.state_block_map[&tip].clone();
+        let transactions = block.content.content.clone();
+
+        for transaction in &transactions {
+            newest_state.update(&transaction);
+        }
+
+        self.state_block_map.insert(block.hash(), newest_state);
+    }
 }
 
 #[derive(Debug, Default, Clone)]

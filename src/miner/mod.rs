@@ -14,8 +14,7 @@ use crate::types::block::BlockHeader;
 use crate::types::hash::Hashable;
 use crate::types::hash::H256;
 use crate::types::merkle::MerkleTree;
-use crate::types::transaction::Mempool;
-use crate::types::transaction::SignedTransaction;
+use crate::types::transaction::{SignedTransaction, StatePerBlock};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -38,7 +37,8 @@ pub struct Context {
     finished_block_chan: Sender<Block>,
     blockchain: Arc<Mutex<Blockchain>>, // midterm2, according to document, implement this type
     tip: H256, // midterm2, the reason why add this part is from the discusssion on piazza
-               // mempool: Arc<Mutex<Mempool>>, // mempool for midproject5
+    // mempool: Arc<Mutex<Mempool>>, // mempool for midproject5
+    state_per_block: Arc<Mutex<StatePerBlock>>,
 }
 
 #[derive(Clone)]
@@ -47,17 +47,22 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Block>) {
+pub fn new(
+    blockchain: &Arc<Mutex<Blockchain>>,
+    state_per_block: &Arc<Mutex<StatePerBlock>>,
+) -> (Context, Handle, Receiver<Block>) {
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let (finished_block_sender, finished_block_receiver) = unbounded();
     // let fake_mempool = Mempool::new();
+
     let ctx = Context {
         control_chan: signal_chan_receiver,
         operating_state: OperatingState::Paused,
         finished_block_chan: finished_block_sender,
-        blockchain: Arc::clone(blockchain), // midterm2 added
+        blockchain: Arc::clone(blockchain),    // midterm2 added
         tip: blockchain.lock().unwrap().tip(), // midterm2 added
-                                            // mempool: Arc::new(Mutex::new(fake_mempool.clone())),
+        state_per_block: Arc::clone(state_per_block),
+        // mempool: Arc::new(Mutex::new(fake_mempool.clone()))    };
     };
 
     let handle = Handle {
@@ -72,9 +77,10 @@ pub fn new(blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle, Receiver<Bl
 fn test_new() -> (Context, Handle, Receiver<Block>) {
     let fake_blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(fake_blockchain));
-    let fake_mempool = Mempool::new();
-    let mempool = Arc::new(Mutex::new(fake_mempool));
-    new(&blockchain)
+    let fake_states = Arc::new(Mutex::new(StatePerBlock::new()));
+    // let fake_mempool = Mempool::new();
+    // let mempool = Arc::new(Mutex::new(fake_mempool));
+    new(&blockchain, &fake_states)
 }
 
 impl Handle {
@@ -165,6 +171,9 @@ impl Context {
             // self.finished_block_chan.send(block.clone()).expect("Send finished block error");
 
             let blockchain = self.blockchain.lock().unwrap();
+            let mut state_per_block = self.state_per_block.lock().unwrap();
+            let mut state_newest = state_per_block.state_block_map[&blockchain.tip].clone();
+
             // let mut block_parent = blockchain2.tip();    // Uncomment this, due to test case error
             let block_parent = self.tip;
 
@@ -208,6 +217,7 @@ impl Context {
                         let first_hash = mempool_mutex.deque.pop_front().unwrap();
                         let first_tx = mempool_mutex.tx_map.remove(&first_hash).unwrap();
                         packed_transcation.push(first_tx.clone());
+                        state_newest.update(&first_tx);
                     } else {
                         break;
                     }
@@ -218,6 +228,10 @@ impl Context {
                     header: block_header,
                     content: block_content,
                 };
+
+                state_per_block
+                    .state_block_map
+                    .insert(new_block.hash(), state_newest);
 
                 self.finished_block_chan
                     .send(new_block.clone())
