@@ -45,7 +45,7 @@ pub struct UTXO_output {
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct State {
-    pub state_map: HashMap<(H256, u8), (u64, Address)>,
+    pub state_map: HashMap<UTXO_input, UTXO_output>,
 }
 
 impl State {
@@ -62,21 +62,28 @@ impl State {
         let transcation = signed_transaction.transcation.clone();
         for transcation_input in transcation.input {
             self.state_map
-                .remove(&(transcation_input.prev_tx_hash, transcation_input.index));
+                .remove(&transcation_input);
         }
 
         let mut idx = 0;
         for transcation_output in transcation.output {
             let transcation_hash = signed_transaction.hash();
-            self.state_map.insert(
-                (transcation_hash, idx),
-                (
-                    transcation_output.value,
-                    transcation_output.receipient_address,
-                ),
-            );
+            let UTXO_tmp = UTXO_input{prev_tx_hash: transcation_hash, index: idx};
+            self.state_map.insert(UTXO_tmp,transcation_output);
             idx += 1;
         }
+    }
+
+    // NOT SURE YET!!!!!!!!!!!!!!!!!!!!
+    pub fn double_spending_check(&self, t:SignedTransaction) -> bool{
+        let mut res: bool = true;
+        for utxo in t.transcation.input{
+            if self.state_map.contains_key(&utxo){
+                res = false;
+                break
+            }
+        }
+        res
     }
 }
 
@@ -106,9 +113,11 @@ impl StatePerBlock {
         let rand_num: u8 = rng.gen();
         let previous_output: H256 = [rand_num; 32].into();
 
+        let UTXO_intmp = UTXO_input{prev_tx_hash: previous_output, index: index};
+        let UTXO_outtmp = UTXO_output{value: value, receipient_address: fake_address};
         ico_state
             .state_map
-            .insert((previous_output, index), (value, fake_address));
+            .insert(UTXO_intmp, UTXO_outtmp);
 
         self.state_block_map.insert(h, ico_state);
     }
@@ -164,6 +173,10 @@ impl Mempool {
         if (self.tx_map.contains_key(&t_hash)) {
             self.tx_map.remove(&t_hash);
         }
+    }
+
+    pub fn restore_transaction(&mut self, t: &SignedTransaction){
+        self.insert(t);
     }
 }
 
