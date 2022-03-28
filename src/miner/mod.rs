@@ -184,7 +184,7 @@ impl Context {
             // adjust the difficulty to modify mining speed
             let mut tmp_difficulty = [255u8; 32];
             tmp_difficulty[0] = 0u8;
-            // tmp_difficulty[1] = 0u8;
+            tmp_difficulty[1] = 0u8;
             // tmp_difficulty[2] = 63u8;
             let block_difficulty = tmp_difficulty.into();
 
