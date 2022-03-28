@@ -6,8 +6,7 @@ use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
 use crate::types::transaction::{verify, SignedTransaction, State, StatePerBlock};
 use std::collections::HashMap;
-use std::convert::TryInto;
-
+use ring::digest::{self, Context, Digest, SHA256};
 // use futures::executor::block_on;
 // use futures::lock;
 use log::{debug, error, warn};
@@ -113,9 +112,20 @@ impl Worker {
                 Message::Blocks(blocks) => {
                     let mut new_block_hashes: Vec<H256> = Vec::new();
                     let mut unseen: Vec<H256> = Vec::new();
-
+                    
                     for block in blocks.iter() {
+
                         // judge if the block already exists in the block chain
+                        let mut locked_state_per_block = self.state_per_block.lock().unwrap();
+                        for tx in &block.content.content {
+                            if !transaction_check(&locked_state_per_block.state_block_map[&locked_blockchian.tip], &tx){
+                                continue;
+                            }
+                        }
+                        
+                        drop(locked_state_per_block);
+
+
                         if locked_blockchian.blocks.contains_key(&block.hash()) {
                             continue;
                         }
@@ -130,7 +140,7 @@ impl Worker {
                         else {
                             let mut tmp_difficulty = [255u8; 32];
                             tmp_difficulty[0] = 0u8;
-                            // tmp_difficulty[1] = 0u8;
+                            tmp_difficulty[1] = 0u8;
                             // tmp_difficulty[2] = 63u8;
                             let root_diff: H256 = tmp_difficulty.into();
                             // let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
@@ -269,16 +279,19 @@ impl Worker {
 
                     let mut transactions_new = Vec::new();
 
-                    for tx in signedtransactions {
+                    for tx in &signedtransactions {
+                       
                         let t_hash = tx.hash();
-                        let public_key_tx = tx.public_key;
-                        let signature_tx = tx.signature;
-                        let transaction = tx.transcation;
+                        let public_key_tx = &tx.public_key;
+                        let signature_tx = &tx.signature;
+                        let transaction = &tx.transcation;
 
                         // verify with the publickey
-                        if !verify(&transaction, &public_key_tx, &signature_tx) {
+                        let mut locked_state_per_block = self.state_per_block.lock().unwrap();
+                        if !transaction_check(&locked_state_per_block.state_block_map[&locked_blockchian.tip], &tx){
                             continue;
                         }
+                        drop(locked_state_per_block);
 
                         // add check here
                         if !mempool_mutex.tx_map.contains_key(&t_hash) {
@@ -306,6 +319,108 @@ impl Worker {
             // drop(locked_orphan_buffer);
         }
     }
+    
+}
+
+// fn is_blck_valid(block: &Block, parent_state: &State) -> bool {
+//     for signed_tx in &block.content.content {
+//         debug!("current signed_tx {:?}", signed_tx);
+  
+//          //Couple of checks
+//          //1. Owner match
+//          //2. Input/Output total match
+//          //3. Double Spend
+//          let public_key_hash = digest::digest(&digest::SHA256, signed_tx.public_key.as_ref());
+//          let mut raw_address: [u8; 20] = [0; 20];
+//          raw_address.copy_from_slice(&(public_key_hash.as_ref()[12..32]));
+//          let owner_address:address::Address = (raw_address).into();
+//         //  let owner_address = address::address_from_public_key_vec_ref(&signed_tx.public_key);
+         
+//          let mut total_input_value = 0;
+//          for input in &signed_tx.transcation.input {
+//              debug!("current tx_input {:?}", input);
+//              if !parent_state.state_map.contains_key(&input){
+//                 debug!("tx is double spend as input is not there in State!");
+//                 return false;  
+//              }
+//              let output = &parent_state.state_map[&input];
+//              if output.receipient_address != owner_address {
+//                 debug!("owner of tx input doesn't match to previous tx output");
+//                 debug!("input addreess {:?}", owner_address);
+//                 debug!("output address {:?}", output.receipient_address);
+//                 return false;
+//              }
+//              total_input_value = output.value;
+//          }
+         
+//          let mut total_output_value = 0;
+//          for output in &signed_tx.transcation.output {
+//               total_output_value += output.value;
+//          }
+  
+//         //  if total_input_value != total_output_value {
+//         //     debug!("Input sum didn't match to output sum for tx");
+//         //     return false;
+//         //  }
+//       }
+//       true
+// }
+
+pub fn transaction_check(state: &State, signed_tx: &SignedTransaction)->bool{
+
+    //validate signature
+    if !verify(
+        &signed_tx.transcation, 
+        &signed_tx.public_key, 
+        &signed_tx.signature){
+            return false;
+        }
+
+    //consistent owner
+    let mut total_in_amount = 0;
+    for tx_input in &signed_tx.transcation.input {
+
+        
+        // check the utxo input matches the current address
+        // calculate the total input amount
+        if state.state_map.contains_key(&tx_input) {
+            let prev_tx_output = &state.state_map[tx_input];
+            let input_amount = prev_tx_output.value;
+            let prev_recipient_addr = prev_tx_output.receipient_address;
+            
+            total_in_amount += input_amount;
+
+            let public_key_hash = digest::digest(&digest::SHA256, signed_tx.public_key.as_ref());
+            let mut raw_address = [0u8; 20];
+            raw_address.copy_from_slice(&(public_key_hash.as_ref()[12..32]));
+            let owner_address = (raw_address).into();
+
+            
+            if prev_recipient_addr != owner_address {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
+    }
+    
+    
+    // Check double spending 
+    if state.double_spending_check(signed_tx.clone()){
+        return false;
+    }
+
+    // check the input amount matches the output amount
+    let mut total_out_amount = 0;
+    for txout in &signed_tx.transcation.output{
+        total_out_amount += txout.value;
+    }
+    // >= or !=
+    if total_out_amount >= total_in_amount {
+        return false;
+    }
+    true
 }
 
 #[cfg(any(test, test_utilities))]
