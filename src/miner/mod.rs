@@ -10,7 +10,6 @@ use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::block::BlockContent;
 use crate::types::block::BlockHeader;
-// use crate::types::block::generate_random_block;
 use crate::types::hash::Hashable;
 use crate::types::hash::H256;
 use crate::types::merkle::MerkleTree;
@@ -211,7 +210,7 @@ impl Context {
             };
 
             if block_header.hash() <= block_difficulty {
-                for i in 0..20 {
+                for _i in 0..20 {
                     // if mempool not empty, pop values from mempool
                     if !mempool_mutex.deque.is_empty() {
                         let first_hash = mempool_mutex.deque.pop_front().unwrap();
