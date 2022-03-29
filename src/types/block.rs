@@ -3,6 +3,8 @@ use crate::types::hash::{Hashable, H256};
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::str;
+use crate::types::merkle::MerkleTree;
+use rand::Rng;
 
 // According to midterm1, add Block, BlockHeader and BlockContent
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -57,9 +59,7 @@ impl Block {
 
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_block(parent: &H256) -> Block {
-    use crate::types::merkle::MerkleTree;
-    use rand::{Rng, Fill};
-    use std::convert::TryInto;
+    
 
     let mut rng = rand::thread_rng();
     // Generate random nonce
