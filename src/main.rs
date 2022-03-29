@@ -12,16 +12,16 @@ use api::Server as ApiServer;
 use blockchain::Blockchain;
 use clap::clap_app;
 use log::{error, info};
-use serde::__private::ser;
+// use serde::__private::ser;
 use smol::channel;
 use std::collections::HashMap;
 use std::net;
-use std::ops::RangeBounds;
+// use std::ops::RangeBounds;
 use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
-use types::transaction::{State, StatePerBlock};
+use types::transaction::{StatePerBlock};
 use types::transaction_generate;
 
 fn main() {
@@ -58,16 +58,16 @@ fn main() {
 
     let locked_bc = blockchain.lock().unwrap();
     let locked_spb = state_per_block.lock().unwrap();
-    println!(
-        "######## the valuse inside is: {:?} ##########",
-        locked_spb.state_block_map[&locked_bc.tip()]
-    );
+    // println!(
+    //     "######## the valuse inside is: {:?} ##########",
+    //     locked_spb.state_block_map[&locked_bc.tip()]
+    // );
     drop(locked_spb);
     drop(locked_bc);
     // thread::sleep(time::Duration::from_millis(20000));
 
     // proj3 added
-    let buffer = Arc::new(Mutex::new(HashMap::new()));
+    // let buffer = Arc::new(Mutex::new(HashMap::new()));
     let orphan_buffer = Arc::new(Mutex::new(HashMap::new()));
 
     // parse p2p server address
@@ -111,14 +111,13 @@ fn main() {
         msg_rx,
         &server,
         &blockchain,
-        &buffer,
         &orphan_buffer,
         &state_per_block,
     );
     worker_ctx.start();
 
     // responsible for generate random transactions
-    let (txs_generator_ctx, txs_generator) = transaction_generate::new(&server, &blockchain);
+    let (txs_generator_ctx, txs_generator) = transaction_generate::new(&server, &blockchain, &state_per_block);
     txs_generator_ctx.start();
 
     // start the miner
@@ -161,7 +160,7 @@ fn main() {
     }
 
     // start the API server
-    ApiServer::start(api_addr, &miner, &server, &blockchain, &txs_generator);
+    ApiServer::start(api_addr, &miner, &server, &blockchain, &txs_generator, &state_per_block);
     // debug!("test");
     loop {
         std::thread::park();
