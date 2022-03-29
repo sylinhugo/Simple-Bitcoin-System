@@ -1,37 +1,40 @@
-use super::block::{self, Block};
+// use super::block::{self, Block};
+use super::transaction::StatePerBlock;
 use crate::blockchain::Blockchain;
 use crate::network::message::Message;
-use crate::network::peer;
+// use crate::network::peer;
 use crate::network::server::Handle as ServerHandle;
 use crate::types::address::Address;
-use crate::types::hash::{self, Hashable, H256};
+use crate::types::hash::{Hashable, H256};
 use crate::types::transaction::{
-    sign, Mempool, SignedTransaction, Transaction, UTXO_input, UTXO_output,
+    sign, SignedTransaction, Transaction, UTXO_input, UTXO_output,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
-use futures::AsyncWriteExt;
+// use futures::AsyncWriteExt;
 use log::{debug, info, warn};
-use rand::distributions::Open01;
-use rand::seq::SliceRandom;
+// use rand::seq::{SliceRandom, index};
 use rand::Rng;
-use ring::digest;
+use ring::{digest, rand::SystemRandom};
 use ring::signature::{
     self, Ed25519KeyPair, EdDSAParameters, KeyPair, Signature, VerificationAlgorithm,
 };
+// use std::ptr::null;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
+use crate::types::{address, key_pair};
+use std::{convert::TryInto, ops::Add};
 
 // enum class that supports message in channel
 enum ControlSignal {
-    Start(u64), // the number controls the theta of interval between block generation
+    Start(u64, u16), // the number controls the theta of interval between block generation
     Update,     // change name Gen to Update
     Exit,
 }
 
 enum OperatingState {
     Paused,
-    Run(u64),
+    Run(u64, u16),
     ShutDown,
 }
 
@@ -41,6 +44,7 @@ pub struct Context {
     operating_state: OperatingState,
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
+    state_per_block: Arc<Mutex<StatePerBlock>>,
 }
 
 #[derive(Clone)]
@@ -49,7 +53,7 @@ pub struct Handle {
     control_chan: Sender<ControlSignal>,
 }
 
-pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>) -> (Context, Handle) {
+pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>, state_per_block: &Arc<Mutex<StatePerBlock>>) -> (Context, Handle) {
     // bound receiver and sender to comunication in channels
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
     let ctx = Context {
@@ -57,11 +61,11 @@ pub fn new(server: &ServerHandle, blockchain: &Arc<Mutex<Blockchain>>) -> (Conte
         operating_state: OperatingState::Paused,
         server: server.clone(),
         blockchain: blockchain.clone(),
+        state_per_block: state_per_block.clone(),
     };
     let handle = Handle {
         control_chan: signal_chan_sender,
     };
-
     (ctx, handle)
 }
 
@@ -70,8 +74,8 @@ impl Handle {
         self.control_chan.send(ControlSignal::Exit).unwrap();
     }
 
-    pub fn start(&self, theta: u64) {
-        self.control_chan.send(ControlSignal::Start(theta)).unwrap();
+    pub fn start(&self, theta: u64, port_number: u16) {
+        self.control_chan.send(ControlSignal::Start(theta, port_number)).unwrap();
     }
 
     pub fn update(&self) {
@@ -91,15 +95,36 @@ impl Context {
     }
 
     fn generator_loop(&mut self) {
-        use crate::types::{address, key_pair};
-        use std::{convert::TryInto, ops::Add};
+        
+        let mut addr_index: u16 = 0;
+        
+        let rngg = SystemRandom::new();
+        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rngg).unwrap();
+        let key1 = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref().into()).unwrap();
 
-        // On startup, insert and ICO for yourself into the mempool
-        info!("Executing ICO - Generating Sourceless TX");
+        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rngg).unwrap();
+        let key2 = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref().into()).unwrap();
 
-        // Share ICO TX with others - they likely won't mine it, but should have it on hand
-        // let signed_tx_hash: H256 = signed_tx.hash();
-        // self.server.broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
+        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rngg).unwrap();
+        let key3 = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref().into()).unwrap();
+
+        // get addr1
+        let public_key_hash1 = digest::digest(&digest::SHA256, key1.public_key().as_ref());
+        let mut tmp_address1 = [0u8; 20];
+        tmp_address1.copy_from_slice(&(public_key_hash1.as_ref()[0..20]));
+        let addr1: Address = (tmp_address1).into();
+        // get addr2
+        let public_key_hash2 = digest::digest(&digest::SHA256, key2.public_key().as_ref());
+        let mut tmp_address2 = [0u8; 20];
+        tmp_address2.copy_from_slice(&(public_key_hash2.as_ref()[0..20]));
+        let addr2: Address = (tmp_address2).into();
+        // get addr3
+        let public_key_hash3 = digest::digest(&digest::SHA256, key3.public_key().as_ref());
+        let mut tmp2_address3 = [0u8; 20];
+        tmp2_address3.copy_from_slice(&(public_key_hash3.as_ref()[0..20]));
+        let addr3: Address = (tmp2_address3).into();
+
+        println!("get 3 address");
         loop {
             // print!("matching state");
             match self.operating_state {
@@ -111,9 +136,10 @@ impl Context {
                             info!("Generator shutting down");
                             self.operating_state = OperatingState::ShutDown;
                         }
-                        ControlSignal::Start(i) => {
-                            info!("Generator starting in continuous mode with theta {}", i);
-                            self.operating_state = OperatingState::Run(i);
+                        ControlSignal::Start(i, j) => {
+                            // info!("Generator starting in continuous mode with theta {}", i);
+                            addr_index = j;
+                            self.operating_state = OperatingState::Run(i, j);
                         }
                         ControlSignal::Update => {
                             // in paused state, don't need to update
@@ -131,9 +157,9 @@ impl Context {
                                 info!("Generator shutting down");
                                 self.operating_state = OperatingState::ShutDown;
                             }
-                            ControlSignal::Start(i) => {
+                            ControlSignal::Start(i, j) => {
                                 info!("Generator starting in continuous mode with theta {}", i);
-                                self.operating_state = OperatingState::Run(i);
+                                self.operating_state = OperatingState::Run(i, j);
                             }
                             ControlSignal::Update => {
                                 unimplemented!()
@@ -149,74 +175,135 @@ impl Context {
             }
             let blockchain_mtx = self.blockchain.lock().unwrap();
             let mut mempool_locked = blockchain_mtx.mempool.lock().unwrap();
+            let locked_state_per_block = self.state_per_block.lock().unwrap();
+
+            let mut used_tx = mempool_locked.used_tx.clone();
             // println!("Generate a transaction, size of mempool 0 {}", mempool_locked.deque.len());
-            use crate::types::{address, key_pair};
-            use std::{convert::TryInto, ops::Add};
             // assemble a fake transaction
-            let mut rng = rand::thread_rng();
-            let mut sender = Vec::<u8>::with_capacity(20);
-            let mut receiver = Vec::<u8>::with_capacity(20);
-            let mut address_array = [0u8; 20];
+
+            let mut rng = rand::thread_rng(); // thread to generate random integers
+            let mut sender = Vec::<u8>::with_capacity(20); // no use
+            let mut receiver = Vec::<u8>::with_capacity(20); // no use
+
+            // randomly generate a recipient address
+            let rand_address_idx: u8 = rng.gen();
+            
+            let rand_recip_addr: Address;
+            if (rand_address_idx % 3 == 0){
+                rand_recip_addr = addr1;
+            } else if (rand_address_idx % 3 == 1){
+                rand_recip_addr = addr2;
+            } else {
+                rand_recip_addr = addr3;
+            }
+            println!("rand_recip_addr   s{:?}", rand_recip_addr);
+            println!(
+                "Generate a transaction, size of mempool {}",
+                mempool_locked.deque.len()
+            );
+            // local_addr of this port
+            let mut local_addr = addr1;
+            if addr_index == 7001{
+                local_addr = addr2
+            } else if (addr_index == 7002){
+                local_addr = addr3;
+            }
+            println!("local_addr   {:?}", local_addr);
             for i in 0..20 {
                 sender.push(rng.gen());
                 receiver.push(rng.gen());
-                address_array[i] = rng.gen();
+            }
+
+            // get to the newest state to avoid state
+            let mut aval_amount = 0;
+            let newest_state = &locked_state_per_block.state_block_map[&blockchain_mtx.tip()];
+
+            for key in newest_state.state_map.keys() {
+                // get the transfer receiver addr
+                
+                let val = &newest_state.state_map[key].clone();
+                if used_tx.contains(val){
+                    continue;
+                }
+                println!("avaible utxo input here");
+                let prev_tx_receiver = val.receipient_address;
+
+                // available previous txs, add total_num
+                if prev_tx_receiver == local_addr {
+                    let mut sender = Vec::<u8>::with_capacity(20); // no use
+                    let mut receiver = Vec::<u8>::with_capacity(20); // no use
+                    for i in 0..20 {
+                        sender.push(rng.gen());
+                        receiver.push(rng.gen());
+                    }
+
+                    aval_amount = val.value;
+                    println!("total available amount this utxo  {}", aval_amount);
+                    // NOT SURE YET!!!!!!!!!!!!!!!!!!!
+                    
+                    let one_input_UTXO = UTXO_input{prev_tx_hash: key.prev_tx_hash, index: key.index}.clone();
+                    let mut utxo_in_vec: Vec<UTXO_input> = Vec::new();
+                    utxo_in_vec.push(one_input_UTXO);
+
+                    // transfer all the amount to another
+                    let utxo_out = UTXO_output{receipient_address: rand_recip_addr, value: aval_amount };
+
+                    // assemble utxo_output
+                    let mut utxo_out_vec = Vec::new();
+                    utxo_out_vec.push(utxo_out);
+                    // utxo_out_vec.push(utxo_out_2);
+        
+                    // sender and receiver, two paras in transaction, fake here
+                    let sender_addr: [u8; 20] = sender.try_into().unwrap();
+                    let receiver_addr: [u8; 20] = receiver.try_into().unwrap();
+        
+                    let transc = Transaction {
+                        sender: Address::new(sender_addr),
+                        receiver: Address::new(receiver_addr),
+                        value: 2,
+                        input: utxo_in_vec,
+                        output: utxo_out_vec,
+                    };
+                    // use public key to sign a transaction
+                    let key = key_pair::random();
+                    let signature = sign(&transc, &key);
+                    // assemble to a signedtransaction
+                    let signed_tx = SignedTransaction {
+                        public_key: key.public_key().as_ref().to_vec(),
+                        signature: signature.as_ref().to_vec(),
+                        transcation: transc,
+                    };
+                    
+                   
+
+                    println!("get a txs");
+                    mempool_locked.insert(&signed_tx);
+                    println!("add txs into mempool");
+
+                     println!(
+                        "Generate a transaction, size of mempool {}",
+                        mempool_locked.deque.len()
+                    );
+                    let signed_tx_hash: H256 = signed_tx.hash();
+                    // broadcast new signedtx inserted
+                    // println!("new_transaction hash");
+                    self.server
+                        .broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
+                    println!("broadcast txs");
+                    // used_tx.insert(&val);
+                    used_tx.insert(val.clone());
+                }
             }
             // assemble utxo_out, random
-            let fake_address = Address::new(address_array);
-            let value: u64 = rng.gen();
-            let fake_utxo_out = UTXO_output {
-                receipient_address: fake_address,
-                value: value,
-            };
-            // assemble utxo_input random
-            let rand_num: u8 = rng.gen();
-            let previous_output: H256 = [rand_num; 32].into();
-            let index: u8 = rng.gen();
-            let fake_utxo_in = UTXO_input {
-                prev_tx_hash: previous_output,
-                index: index,
-            };
-
-            let utxo_in_vec = vec![fake_utxo_in];
-            let utxo_out_vec = vec![fake_utxo_out];
-            // sender and receiver, two paras in transaction
-            let sender_addr: [u8; 20] = sender.try_into().unwrap();
-            let receiver_addr: [u8; 20] = receiver.try_into().unwrap();
-
-            let transc = Transaction {
-                sender: Address::new(sender_addr),
-                receiver: Address::new(receiver_addr),
-                value: rng.gen(),
-                input: utxo_in_vec,
-                output: utxo_out_vec,
-            };
-            // use public key to sign a transaction
-            let key = key_pair::random();
-            let signature = sign(&transc, &key);
-            // assemble to a signedtransaction
-            let signed_tx = SignedTransaction {
-                public_key: key.public_key().as_ref().to_vec(),
-                signature: signature.as_ref().to_vec(),
-                transcation: transc,
-            };
-            // add assembled random signedtransaction into mempool
-            // println!("mempool size {}", mempool_locked.deque.len());
-            println!(
-                "Generate a transaction, size of mempool 1 {}",
-                mempool_locked.deque.len()
-            );
-            mempool_locked.insert(&signed_tx);
-            let signed_tx_hash: H256 = signed_tx.hash();
-            // broadcast new signedtx inserted
-            // println!("new_transaction hash");
-            self.server
-                .broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
-            // self.server
-            //     .broadcast(Message::Transactions(vec![signed_tx]));
+            // transfer 2 to rand_addr
+            
             drop(mempool_locked);
             drop(blockchain_mtx);
-            if let OperatingState::Run(i) = self.operating_state {
+            
+            // add assembled random signedtransaction into mempool
+            // println!("mempool size {}", mempool_locked.deque.len());
+            
+            if let OperatingState::Run(i,j) = self.operating_state {
                 if i != 0 {
                     let interval = time::Duration::from_millis(i / 10 as u64);
                     thread::sleep(interval);

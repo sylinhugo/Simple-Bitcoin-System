@@ -5,13 +5,17 @@ use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
 use rand::Rng;
 use ring::digest::{self, Context, Digest, SHA256};
+use ring::rand::SystemRandom;
 use ring::signature::{
     self, Ed25519KeyPair, EdDSAParameters, KeyPair, Signature, VerificationAlgorithm,
 };
 use serde::{Deserialize, Serialize};
 use std::cmp;
-use std::collections::HashMap;
+use std::collections::{HashMap,HashSet};
 use std::collections::VecDeque;
+use std::hash::Hash;
+use crate::types::{address, key_pair};
+use std::{convert::TryInto, ops::Add};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct Transaction {
@@ -37,7 +41,7 @@ pub struct UTXO_input {
     pub index: u8,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone,  Eq, PartialEq, Hash)]
 pub struct UTXO_output {
     pub receipient_address: Address,
     pub value: u64,
@@ -51,7 +55,6 @@ pub struct State {
 impl State {
     pub fn new() -> Self {
         let state_map = HashMap::new();
-
         State {
             state_map: state_map,
         }
@@ -102,22 +105,34 @@ impl StatePerBlock {
     pub fn initial_coin_offering(&mut self, h: H256) {
         let mut ico_state = State::new();
 
+        let rngg = SystemRandom::new();
+        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rngg).unwrap();
+        let key1 = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref().into()).unwrap();
+        
+        // get addr1
+        let public_key_hash1 = digest::digest(&digest::SHA256, key1.public_key().as_ref());
+        let mut raw_address1 = [0u8; 20];
+        raw_address1.copy_from_slice(&(public_key_hash1.as_ref()[12..32]));
+        let addr1: Address = (raw_address1).into();
+
+        let utxo_out_1 =  UTXO_output { receipient_address: addr1, value: 10000 };
+
         let mut rng = rand::thread_rng();
         let index: u8 = rng.gen();
-        let value: u64 = rng.gen();
-        let mut address_array = [0u8; 20];
-        for i in 0..20 {
-            address_array[i] = rng.gen();
-        }
-        let fake_address = Address::new(address_array);
+        let value: u64 = 10000;
+        let address_array = [0u8; 20];
+        // for i in 0..20 {
+        //     address_array[i] = rng.gen();
+        // }
+        // let fake_address = Address::new(address_array);
         let rand_num: u8 = rng.gen();
         let previous_output: H256 = [rand_num; 32].into();
 
         let UTXO_intmp = UTXO_input{prev_tx_hash: previous_output, index: index};
-        let UTXO_outtmp = UTXO_output{value: value, receipient_address: fake_address};
+        // let UTXO_outtmp = UTXO_output{value: value, receipient_address: fake_address};
         ico_state
             .state_map
-            .insert(UTXO_intmp, UTXO_outtmp);
+            .insert(UTXO_intmp, utxo_out_1);
 
         self.state_block_map.insert(h, ico_state);
     }
@@ -125,7 +140,6 @@ impl StatePerBlock {
     pub fn update(&mut self, tip: H256, block: &Block) {
         let mut newest_state = self.state_block_map[&tip].clone();
         let transactions = block.content.content.clone();
-
         for transaction in &transactions {
             newest_state.update(&transaction);
         }
@@ -138,6 +152,7 @@ impl StatePerBlock {
 pub struct Mempool {
     pub deque: VecDeque<H256>,
     pub tx_map: HashMap<H256, SignedTransaction>,
+    pub used_tx: HashSet<UTXO_output>,
 }
 
 impl Mempool {
@@ -145,6 +160,7 @@ impl Mempool {
         return Mempool {
             deque: VecDeque::new(),
             tx_map: HashMap::new(),
+            used_tx: HashSet::new(),
         };
     }
 
@@ -222,9 +238,6 @@ pub fn verify(t: &Transaction, public_key: &Vec<u8>, signature: &Vec<u8>) -> boo
 
 #[cfg(any(test, test_utilities))]
 pub fn generate_random_transaction() -> Transaction {
-    use crate::types::{address, key_pair};
-    use std::{convert::TryInto, ops::Add};
-
     let mut rng = rand::thread_rng();
     let mut sender = Vec::<u8>::with_capacity(20);
     let mut receiver = Vec::<u8>::with_capacity(20);
