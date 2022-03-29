@@ -6,13 +6,13 @@ use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
 use crate::types::transaction::{verify, SignedTransaction, State, StatePerBlock};
 use std::collections::HashMap;
-use ring::digest::{self, Context, Digest, SHA256};
+use ring::digest::{self};
 // use futures::executor::block_on;
 // use futures::lock;
 use log::{debug, error, warn};
-use ring::signature;
+// use ring::signature;
 use std::sync::{Arc, Mutex};
-use std::{clone, mem, thread};
+use std::{thread};
 
 #[cfg(any(test, test_utilities))]
 use super::peer::TestReceiver as PeerTestReceiver;
@@ -24,7 +24,7 @@ pub struct Worker {
     num_worker: usize,
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
-    buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
+    // buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
     orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>,
     state_per_block: Arc<Mutex<StatePerBlock>>,
 }
@@ -35,7 +35,7 @@ impl Worker {
         msg_src: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
         server: &ServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>,
-        buffer: &Arc<Mutex<HashMap<H256, Block>>>,
+        // buffer: &Arc<Mutex<HashMap<H256, Block>>>,
         orphan_buffer: &Arc<Mutex<HashMap<H256, Block>>>,
         state_per_block: &Arc<Mutex<StatePerBlock>>,
     ) -> Self {
@@ -44,7 +44,7 @@ impl Worker {
             num_worker,
             server: server.clone(),
             blockchain: Arc::clone(blockchain),
-            buffer: Arc::clone(buffer),
+            // buffer: Arc::clone(buffer),
             orphan_buffer: Arc::clone(orphan_buffer),
             state_per_block: Arc::clone(state_per_block),
         }
@@ -74,7 +74,7 @@ impl Worker {
 
             // I think it world be better to initialize lock type variables in advanced
             let mut locked_blockchian = self.blockchain.lock().unwrap();
-            let mut locked_bffer = self.buffer.lock().unwrap();
+            // let locked_bffer = self.buffer.lock().unwrap();
             let mut locked_orphan_buffer = self.orphan_buffer.lock().unwrap();
 
             match msg {
@@ -116,7 +116,7 @@ impl Worker {
                     for block in blocks.iter() {
 
                         // judge if the block already exists in the block chain
-                        let mut locked_state_per_block = self.state_per_block.lock().unwrap();
+                        let locked_state_per_block = self.state_per_block.lock().unwrap();
                         for tx in &block.content.content {
                             if !transaction_check(&locked_state_per_block.state_block_map[&locked_blockchian.tip], &tx){
                                 continue;
@@ -256,7 +256,7 @@ impl Worker {
                     // drop(mempool_mutex);
                 }
                 Message::GetTransactions(hashes) => {
-                    // println!("receive req get txs");
+                    println!("receive req get txs");
                     let mempool_mutex = locked_blockchian.mempool.lock().unwrap();
                     // vector to store requested blocks
                     let mut transactions = Vec::new();
@@ -274,7 +274,7 @@ impl Worker {
                     // drop(mempool_mutex);
                 }
                 Message::Transactions(signedtransactions) => {
-                    // println!("receive req txs");
+                    println!("receive req txs");
                     let mut mempool_mutex = locked_blockchian.mempool.lock().unwrap();
 
                     let mut transactions_new = Vec::new();
@@ -287,7 +287,7 @@ impl Worker {
                         let transaction = &tx.transcation;
 
                         // verify with the publickey
-                        let mut locked_state_per_block = self.state_per_block.lock().unwrap();
+                        let locked_state_per_block = self.state_per_block.lock().unwrap();
                         if !transaction_check(&locked_state_per_block.state_block_map[&locked_blockchian.tip], &tx){
                             continue;
                         }
@@ -377,26 +377,25 @@ pub fn transaction_check(state: &State, signed_tx: &SignedTransaction)->bool{
         }
 
     //consistent owner
-    let mut total_in_amount = 0;
-    for tx_input in &signed_tx.transcation.input {
-
-        
+    let mut total_avail_amount = 0;
+    for utxo_input in &signed_tx.transcation.input {
+      
         // check the utxo input matches the current address
         // calculate the total input amount
-        if state.state_map.contains_key(&tx_input) {
-            let prev_tx_output = &state.state_map[tx_input];
-            let input_amount = prev_tx_output.value;
+        if state.state_map.contains_key(&utxo_input) {
+            let prev_tx_output = &state.state_map[utxo_input];
+            let transfer_amount = prev_tx_output.value;
             let prev_recipient_addr = prev_tx_output.receipient_address;
             
-            total_in_amount += input_amount;
+            total_avail_amount += transfer_amount;
 
             let public_key_hash = digest::digest(&digest::SHA256, signed_tx.public_key.as_ref());
-            let mut raw_address = [0u8; 20];
-            raw_address.copy_from_slice(&(public_key_hash.as_ref()[12..32]));
-            let owner_address = (raw_address).into();
+            let mut tmp_address = [0u8; 20];
+            tmp_address.copy_from_slice(&(public_key_hash.as_ref()[0..20]));
+            let receiver_address = (tmp_address).into();
 
             
-            if prev_recipient_addr != owner_address {
+            if prev_recipient_addr != receiver_address {
                 return false;
             }
         }
@@ -404,20 +403,19 @@ pub fn transaction_check(state: &State, signed_tx: &SignedTransaction)->bool{
             return false;
         }
     }
-    
-    
+
     // Check double spending 
     if state.double_spending_check(signed_tx.clone()){
         return false;
     }
 
     // check the input amount matches the output amount
-    let mut total_out_amount = 0;
-    for txout in &signed_tx.transcation.output{
-        total_out_amount += txout.value;
+    let mut total_transfer_amount = 0;
+    for utxo_out in &signed_tx.transcation.output{
+        total_transfer_amount += utxo_out.value;
     }
     // >= or !=
-    if total_out_amount >= total_in_amount {
+    if total_transfer_amount >= total_avail_amount {
         return false;
     }
     true
@@ -452,8 +450,8 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
 
     let fake_blockchain = Blockchain::new();
     let blockchain = Arc::new(Mutex::new(fake_blockchain));
-    let fake_buffer = HashMap::new();
-    let buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_buffer));
+    // let fake_buffer = HashMap::new();
+    // let buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_buffer));
     let fake_orphan_buffer = HashMap::new();
     let orphan_buffer: Arc<Mutex<HashMap<H256, Block>>> = Arc::new(Mutex::new(fake_orphan_buffer));
     let state_per_block = Arc::new(Mutex::new(StatePerBlock::new()));
@@ -464,7 +462,7 @@ fn generate_test_worker_and_start() -> (TestMsgSender, ServerTestReceiver, Vec<H
         msg_chan,
         &server,
         &blockchain,
-        &buffer,
+        // &buffer,
         &orphan_buffer,
         &state_per_block,
     );
