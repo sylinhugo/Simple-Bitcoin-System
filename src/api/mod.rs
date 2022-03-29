@@ -4,6 +4,7 @@ use crate::network::message::Message;
 use crate::network::server::Handle as NetworkServerHandle;
 use crate::types::block;
 use crate::types::hash::Hashable;
+use crate::types::transaction::StatePerBlock;
 use crate::types::transaction_generate::Handle as TXGenerateHandle;
 use serde::Serialize;
 
@@ -23,6 +24,7 @@ pub struct Server {
     network: NetworkServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
     tx_generator: TXGenerateHandle,
+    state_per_block: Arc<Mutex<StatePerBlock>>,
 }
 
 #[derive(Serialize)]
@@ -59,6 +61,7 @@ impl Server {
         network: &NetworkServerHandle,
         blockchain: &Arc<Mutex<Blockchain>>,
         tx_generator: &TXGenerateHandle,
+        state_per_block: &Arc<Mutex<StatePerBlock>>,
     ) {
         let handle = HTTPServer::http(&addr).unwrap();
         let server = Self {
@@ -67,6 +70,7 @@ impl Server {
             network: network.clone(),
             blockchain: Arc::clone(blockchain),
             tx_generator: tx_generator.clone(),
+            state_per_block: Arc::clone(state_per_block),
         };
         thread::spawn(move || {
             for req in server.handle.incoming_requests() {
@@ -74,6 +78,7 @@ impl Server {
                 let network = server.network.clone();
                 let blockchain = Arc::clone(&server.blockchain);
                 let tx_generator = server.tx_generator.clone();
+                let state_per_block = Arc::clone(&server.state_per_block);
                 thread::spawn(move || {
                     // a valid url requires a base
                     let base_url = Url::parse(&format!("http://{}/", &addr)).unwrap();
@@ -179,6 +184,66 @@ impl Server {
                         "/blockchain/longest-chain-tx-count" => {
                             // unimplemented!()
                             respond_result!(req, false, "unimplemented!");
+                        }
+                        "/blockchain/state" => {
+                            let blockchain_mtx = blockchain.lock().unwrap();
+                            let locked_state_per_block = state_per_block.lock().unwrap();
+                            // let res = Vec::new();
+
+                            let params = url.query_pairs();
+                            let params: HashMap<_, _> = params.into_owned().collect();
+                            let block = match params.get("block") {
+                                Some(v) => v,
+                                None => {
+                                    respond_result!(req, false, "missing block");
+                                    return;
+                                }
+                            };
+                            let block = match block.parse::<u32>() {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    respond_result!(
+                                        req,
+                                        false,
+                                        format!("error parsing block: {}", e)
+                                    );
+                                    return;
+                                }
+                            };
+                            // here we get the number of block
+                            let mut cur_block_hash = blockchain_mtx.tip();
+                            let mut cur_block = &blockchain_mtx.blocks[&cur_block_hash];
+                            loop {
+                                if blockchain_mtx.lengths[&cur_block_hash] == block {
+                                    break;
+                                }
+                                cur_block = &blockchain_mtx.blocks[&cur_block_hash];
+                                cur_block_hash = cur_block.header.parent;
+                            }
+                            // get the state according to the block seq num
+                            let block_state =
+                                locked_state_per_block.state_block_map[&cur_block_hash].clone();
+                            let mut res = Vec::new();
+                            for key in block_state.state_map.keys() {
+                                let mut tmp = Vec::new();
+                                let value = &block_state.state_map[key];
+                                // convert to string
+                                let prev_tx_hash_s = key.prev_tx_hash.to_string();
+                                let index_s = key.index.to_string();
+                                let value_s = value.value.to_string();
+                                let recipient_s = value.receipient_address.to_string();
+                                let tuple_res = prev_tx_hash_s
+                                    + " "
+                                    + &index_s
+                                    + " "
+                                    + &value_s
+                                    + " "
+                                    + &recipient_s;
+                                tmp.push(tuple_res);
+                                res.push(tmp);
+                            }
+
+                            respond_json!(req, res);
                         }
                         _ => {
                             let content_type =

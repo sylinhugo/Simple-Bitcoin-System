@@ -161,7 +161,14 @@ fn main() {
     }
 
     // start the API server
-    ApiServer::start(api_addr, &miner, &server, &blockchain, &txs_generator);
+    ApiServer::start(
+        api_addr,
+        &miner,
+        &server,
+        &blockchain,
+        &txs_generator,
+        &state_per_block,
+    );
     // debug!("test");
     loop {
         std::thread::park();
