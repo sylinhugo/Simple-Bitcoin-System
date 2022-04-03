@@ -21,7 +21,7 @@ use std::process;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
-use types::transaction::{StatePerBlock};
+use types::transaction::StatePerBlock;
 use types::transaction_generate;
 
 fn main() {
@@ -36,39 +36,9 @@ fn main() {
      (@arg p2p_workers: --("p2p-workers") [INT] default_value("4") "Sets the number of worker threads for P2P server")
     )
     .get_matches();
-
     // init logger
     let verbosity = matches.occurrences_of("verbose") as usize;
     stderrlog::new().verbosity(verbosity).init().unwrap();
-
-    let blockchain = Blockchain::new();
-
-    println!(
-        "###########  tip of blockchain {}  ##########",
-        blockchain.tip
-    );
-    // thread::sleep(time::Duration::from_millis(20000));
-
-    let mut _states_p_b = StatePerBlock::new();
-    _states_p_b.initial_coin_offering(blockchain.tip);
-
-    let blockchain = Arc::new(Mutex::new(blockchain));
-
-    let state_per_block = Arc::new(Mutex::new(_states_p_b));
-
-    let locked_bc = blockchain.lock().unwrap();
-    let locked_spb = state_per_block.lock().unwrap();
-    // println!(
-    //     "######## the valuse inside is: {:?} ##########",
-    //     locked_spb.state_block_map[&locked_bc.tip()]
-    // );
-    drop(locked_spb);
-    drop(locked_bc);
-    // thread::sleep(time::Duration::from_millis(20000));
-
-    // proj3 added
-    // let buffer = Arc::new(Mutex::new(HashMap::new()));
-    let orphan_buffer = Arc::new(Mutex::new(HashMap::new()));
 
     // parse p2p server address
     let p2p_addr = matches
@@ -79,6 +49,28 @@ fn main() {
             error!("Error parsing P2P server address: {}", e);
             process::exit(1);
         });
+
+    let peer_address = p2p_addr.to_string();
+    println!("The ip address of current node is: {:?}", peer_address);
+    let local_addr = peer_address.clone()[10..14].to_string();
+    println!("The port address is: {:?}", local_addr);
+
+    let blockchain = Blockchain::new();
+    let mut _states_p_b = StatePerBlock::new();
+    _states_p_b.initial_coin_offering(blockchain.tip, local_addr);
+
+    let blockchain = Arc::new(Mutex::new(blockchain));
+
+    let state_per_block = Arc::new(Mutex::new(_states_p_b));
+
+    let locked_bc = blockchain.lock().unwrap();
+    let locked_spb = state_per_block.lock().unwrap();
+    drop(locked_spb);
+    drop(locked_bc);
+
+    // proj3 added
+    // let buffer = Arc::new(Mutex::new(HashMap::new()));
+    let orphan_buffer = Arc::new(Mutex::new(HashMap::new()));
 
     // parse api server address
     let api_addr = matches
@@ -117,7 +109,8 @@ fn main() {
     worker_ctx.start();
 
     // responsible for generate random transactions
-    let (txs_generator_ctx, txs_generator) = transaction_generate::new(&server, &blockchain, &state_per_block);
+    let (txs_generator_ctx, txs_generator) =
+        transaction_generate::new(&server, &blockchain, &state_per_block);
     txs_generator_ctx.start();
 
     // start the miner
@@ -160,7 +153,14 @@ fn main() {
     }
 
     // start the API server
-    ApiServer::start(api_addr, &miner, &server, &blockchain, &txs_generator, &state_per_block);
+    ApiServer::start(
+        api_addr,
+        &miner,
+        &server,
+        &blockchain,
+        &txs_generator,
+        &state_per_block,
+    );
     // debug!("test");
     loop {
         std::thread::park();

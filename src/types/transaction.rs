@@ -3,18 +3,21 @@ extern crate ring;
 use super::address::Address;
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
+use crate::types::{address, key_pair};
+use rand::seq::index;
 use rand::Rng;
+use ring::agreement::PublicKey;
 use ring::digest::{self, Context, Digest, SHA256};
+use ring::pkcs8::Document;
 use ring::rand::SystemRandom;
 use ring::signature::{
     self, Ed25519KeyPair, EdDSAParameters, KeyPair, Signature, VerificationAlgorithm,
 };
 use serde::{Deserialize, Serialize};
 use std::cmp;
-use std::collections::{HashMap,HashSet};
 use std::collections::VecDeque;
+use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
-use crate::types::{address, key_pair};
 use std::{convert::TryInto, ops::Add};
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -41,7 +44,7 @@ pub struct UTXO_input {
     pub index: u8,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Clone,  Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct UTXO_output {
     pub receipient_address: Address,
     pub value: u64,
@@ -64,26 +67,28 @@ impl State {
     pub fn update(&mut self, signed_transaction: &SignedTransaction) {
         let transcation = signed_transaction.transcation.clone();
         for transcation_input in transcation.input {
-            self.state_map
-                .remove(&transcation_input);
+            self.state_map.remove(&transcation_input);
         }
 
         let mut idx = 0;
         for transcation_output in transcation.output {
             let transcation_hash = signed_transaction.hash();
-            let UTXO_tmp = UTXO_input{prev_tx_hash: transcation_hash, index: idx};
-            self.state_map.insert(UTXO_tmp,transcation_output);
+            let UTXO_tmp = UTXO_input {
+                prev_tx_hash: transcation_hash,
+                index: idx,
+            };
+            self.state_map.insert(UTXO_tmp, transcation_output);
             idx += 1;
         }
     }
 
     // NOT SURE YET!!!!!!!!!!!!!!!!!!!!
-    pub fn double_spending_check(&self, t:SignedTransaction) -> bool{
+    pub fn double_spending_check(&self, t: SignedTransaction) -> bool {
         let mut res: bool = true;
-        for utxo in t.transcation.input{
-            if self.state_map.contains_key(&utxo){
+        for utxo in t.transcation.input {
+            if self.state_map.contains_key(&utxo) {
                 res = false;
-                break
+                break;
             }
         }
         res
@@ -102,37 +107,82 @@ impl StatePerBlock {
     }
 
     // NOT SURE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    pub fn initial_coin_offering(&mut self, h: H256) {
+    pub fn initial_coin_offering(&mut self, h: H256, local_addr: String) {
         let mut ico_state = State::new();
 
-        let rngg = SystemRandom::new();
-        let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rngg).unwrap();
-        let key1 = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref().into()).unwrap();
-        
-        // get addr1
+        let fake_pkcs8_1 = [
+            48, 83, 2, 1, 1, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 233, 77, 246, 201, 167, 107,
+            216, 106, 66, 251, 234, 64, 21, 147, 230, 47, 60, 94, 121, 184, 191, 244, 54, 34, 105,
+            240, 129, 214, 231, 89, 151, 251, 161, 35, 3, 33, 0, 142, 102, 135, 38, 117, 18, 39,
+            110, 156, 134, 54, 214, 125, 16, 18, 15, 0, 138, 121, 106, 130, 231, 57, 135, 201, 252,
+            122, 104, 160, 135, 37, 22,
+        ];
+        let fake_pkcs8_2 = [
+            48, 83, 2, 1, 1, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 221, 160, 0, 69, 142, 238,
+            92, 231, 167, 252, 227, 123, 243, 51, 8, 112, 159, 115, 176, 53, 121, 76, 64, 36, 99,
+            158, 201, 83, 40, 193, 170, 90, 161, 35, 3, 33, 0, 46, 208, 26, 27, 143, 84, 111, 162,
+            182, 237, 87, 114, 174, 244, 111, 85, 43, 207, 177, 86, 152, 163, 72, 149, 245, 214,
+            81, 95, 128, 149, 87, 177,
+        ];
+        let fake_pkcs8_3 = [
+            48, 83, 2, 1, 1, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 75, 123, 64, 228, 183, 56,
+            33, 50, 44, 73, 244, 34, 178, 89, 108, 50, 191, 37, 170, 254, 186, 221, 226, 111, 158,
+            93, 134, 75, 127, 91, 244, 71, 161, 35, 3, 33, 0, 46, 5, 254, 114, 71, 33, 136, 70,
+            218, 28, 186, 52, 144, 117, 214, 72, 15, 23, 187, 67, 169, 127, 42, 99, 16, 249, 29,
+            107, 196, 71, 0, 132,
+        ];
+        let key1 = Ed25519KeyPair::from_pkcs8(fake_pkcs8_1.as_ref().into()).unwrap();
         let public_key_hash1 = digest::digest(&digest::SHA256, key1.public_key().as_ref());
-        let mut raw_address1 = [0u8; 20];
-        raw_address1.copy_from_slice(&(public_key_hash1.as_ref()[12..32]));
-        let addr1: Address = (raw_address1).into();
+        let mut tmp_address1 = [0u8; 20];
+        tmp_address1.copy_from_slice(&(public_key_hash1.as_ref()[0..20]));
+        let addr1: Address = (tmp_address1).into();
 
-        let utxo_out_1 =  UTXO_output { receipient_address: addr1, value: 10000 };
+        let key2 = Ed25519KeyPair::from_pkcs8(fake_pkcs8_2.as_ref().into()).unwrap();
+        let public_key_hash1 = digest::digest(&digest::SHA256, key2.public_key().as_ref());
+        let mut tmp_address1 = [0u8; 20];
+        tmp_address1.copy_from_slice(&(public_key_hash1.as_ref()[0..20]));
+        let addr2: Address = (tmp_address1).into();
 
-        let mut rng = rand::thread_rng();
-        let index: u8 = rng.gen();
-        let value: u64 = 10000;
-        let address_array = [0u8; 20];
+        let key3 = Ed25519KeyPair::from_pkcs8(fake_pkcs8_3.as_ref().into()).unwrap();
+        let public_key_hash1 = digest::digest(&digest::SHA256, key3.public_key().as_ref());
+        let mut tmp_address1 = [0u8; 20];
+        tmp_address1.copy_from_slice(&(public_key_hash1.as_ref()[0..20]));
+        let addr3: Address = (tmp_address1).into();
+
+        let utxo_out_1 = UTXO_output {
+            receipient_address: addr1,
+            value: 10000,
+        };
+
+        // let mut rng = rand::thread_rng();
+        // let index: u8 = rng.gen();
+        // let value: u64 = 10000;
+        // let address_array = [0u8; 20];
+
         // for i in 0..20 {
         //     address_array[i] = rng.gen();
         // }
         // let fake_address = Address::new(address_array);
-        let rand_num: u8 = rng.gen();
-        let previous_output: H256 = [rand_num; 32].into();
 
-        let UTXO_intmp = UTXO_input{prev_tx_hash: previous_output, index: index};
+        let index = 0;
+        let rand_num = [
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0,
+        ];
+        let previous_output: H256 = rand_num.into();
+
+        // let UTXO_intmp = UTXO_input {
+        //     prev_tx_hash: previous_output,
+        //     index: index,
+        // };
+
+        let UTXO_intmp = UTXO_input {
+            prev_tx_hash: previous_output,
+            index: index,
+        };
+
         // let UTXO_outtmp = UTXO_output{value: value, receipient_address: fake_address};
-        ico_state
-            .state_map
-            .insert(UTXO_intmp, utxo_out_1);
+        ico_state.state_map.insert(UTXO_intmp, utxo_out_1);
 
         self.state_block_map.insert(h, ico_state);
     }
@@ -191,8 +241,70 @@ impl Mempool {
         }
     }
 
-    pub fn restore_transaction(&mut self, t: &SignedTransaction){
+    pub fn restore_transaction(&mut self, t: &SignedTransaction) {
         self.insert(t);
+    }
+}
+
+// pub struct AddressBook {
+//     pub addresses: HashSet<Address>,
+//     pub addresses_vec: Vec<Address>,
+//     pub my_identity: Ed25519KeyPair,
+//     pub my_address: Address,
+// }
+// impl AddressBook {
+//     pub fn new() -> Self {
+//         let key: Ed25519KeyPair = key_pair::random();
+//         let pub_key = key.public_key();
+//         let pub_key_hash: H256 = digest::digest(&digest::SHA256, pub_key.as_ref()).into();
+//         // let address: Address = &(pub_key_hash.as_ref()[0..20]).into();
+//         let mut tmp_address1 = [0u8; 20];
+//         tmp_address1.copy_from_slice(&(pub_key_hash.as_ref()[0..20]));
+//         let address: Address = (tmp_address1).into();
+
+//         AddressBook {
+//             addresses: HashSet::new(),
+//             addresses_vec: Vec::new(),
+//             my_identity: key,
+//             my_address: address,
+//         }
+//     }
+//     pub fn insert_addr(&mut self, new_address: Address) {
+//         if !self.addresses.contains(&new_address) && new_address != self.my_address {
+//             self.addresses.insert(new_address);
+//             self.addresses_vec.push(new_address);
+//         }
+//     }
+//     pub fn get_my_address(&self) -> &Address {
+//         &self.my_address
+//     }
+// }
+
+pub struct AddressBook {
+    pub addresses: HashSet<Address>,
+    pub addresses_vec: Vec<Address>,
+    pub my_identity: Ed25519KeyPair,
+    pub my_address: Address,
+    pub port: u32,
+}
+impl AddressBook {
+    pub fn new(key: Ed25519KeyPair, address: Address, port: u32) -> Self {
+        AddressBook {
+            addresses: HashSet::new(),
+            addresses_vec: Vec::new(),
+            my_identity: key,
+            my_address: address,
+            port: port,
+        }
+    }
+    pub fn insert_addr(&mut self, new_address: Address) {
+        if !self.addresses.contains(&new_address) && new_address != self.my_address {
+            self.addresses.insert(new_address);
+            self.addresses_vec.push(new_address);
+        }
+    }
+    pub fn get_my_address(&self) -> &Address {
+        &self.my_address
     }
 }
 
