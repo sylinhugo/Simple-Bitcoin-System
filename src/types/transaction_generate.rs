@@ -43,6 +43,7 @@ pub struct Context {
     server: ServerHandle,
     blockchain: Arc<Mutex<Blockchain>>,
     state_per_block: Arc<Mutex<StatePerBlock>>,
+    local_addr: String,
 }
 
 #[derive(Clone)]
@@ -55,6 +56,7 @@ pub fn new(
     server: &ServerHandle,
     blockchain: &Arc<Mutex<Blockchain>>,
     state_per_block: &Arc<Mutex<StatePerBlock>>,
+    local_addr: String,
 ) -> (Context, Handle) {
     // bound receiver and sender to comunication in channels
     let (signal_chan_sender, signal_chan_receiver) = unbounded();
@@ -64,6 +66,7 @@ pub fn new(
         server: server.clone(),
         blockchain: blockchain.clone(),
         state_per_block: state_per_block.clone(),
+        local_addr: local_addr,
     };
     let handle = Handle {
         control_chan: signal_chan_sender,
@@ -100,6 +103,7 @@ impl Context {
 
     fn generator_loop(&mut self) {
         let mut addr_index: u16 = 0;
+        // let mut addr_index: u16 = self.local_addr.clone().parse().unwrap();
 
         // let rngg = SystemRandom::new();
         // let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rngg).unwrap();
@@ -165,8 +169,24 @@ impl Context {
         let mut tmp_address1 = [0u8; 20];
         tmp_address1.copy_from_slice(&(public_key_hash1.as_ref()[0..20]));
         let addr3: Address = (tmp_address1).into();
-
         println!("get 3 address");
+
+        let mut local_key = &key1;
+        if addr_index == 6001 {
+            local_key = &key2;
+        } else if addr_index == 6002 {
+            local_key = &key3;
+        }
+
+        // local_addr of this port
+        let mut local_addr = addr1;
+        if addr_index == 6001 {
+            local_addr = addr2
+        } else if addr_index == 6002 {
+            local_addr = addr3;
+        }
+        println!("local_addr   {:?}", local_addr);
+
         loop {
             // print!("matching state");
             match self.operating_state {
@@ -238,21 +258,13 @@ impl Context {
             } else {
                 rand_recip_addr = addr3;
             }
+
             println!("rand_recip_addr is: {:?}", rand_recip_addr);
             println!(
                 "Generate a transaction, size of mempool {}",
                 mempool_locked.deque.len()
             );
             // println!("add   s{:?}", rand_recip_addr);
-
-            // local_addr of this port
-            let mut local_addr = addr1;
-            if addr_index == 7001 {
-                local_addr = addr2
-            } else if addr_index == 7002 {
-                local_addr = addr3;
-            }
-            println!("local_addr   {:?}", local_addr);
 
             for i in 0..20 {
                 sender.push(rng.gen());
@@ -266,11 +278,12 @@ impl Context {
             for key in newest_state.state_map.keys() {
                 // get the transfer receiver addr
 
-                let val = &newest_state.state_map[key].clone();
-                if used_tx.contains(val) {
+                let val = newest_state.state_map[key].clone();
+                if used_tx.contains(&val) {
                     continue;
                 }
                 println!("avaible utxo input here");
+
                 let prev_tx_receiver = val.receipient_address;
 
                 // available previous txs, add total_num
@@ -289,8 +302,7 @@ impl Context {
                     let one_input_UTXO = UTXO_input {
                         prev_tx_hash: key.prev_tx_hash,
                         index: key.index,
-                    }
-                    .clone();
+                    };
                     let mut utxo_in_vec: Vec<UTXO_input> = Vec::new();
                     utxo_in_vec.push(one_input_UTXO);
 
@@ -299,7 +311,6 @@ impl Context {
                         receipient_address: rand_recip_addr,
                         value: aval_amount,
                     };
-
                     // assemble utxo_output
                     let mut utxo_out_vec = Vec::new();
                     utxo_out_vec.push(utxo_out);
@@ -316,12 +327,12 @@ impl Context {
                         input: utxo_in_vec,
                         output: utxo_out_vec,
                     };
+
                     // use public key to sign a transaction
-                    let key = key_pair::random();
-                    let signature = sign(&transc, &key);
+                    let signature = sign(&transc, &local_key);
                     // assemble to a signedtransaction
                     let signed_tx = SignedTransaction {
-                        public_key: key.public_key().as_ref().to_vec(),
+                        public_key: local_key.public_key().as_ref().to_vec(),
                         signature: signature.as_ref().to_vec(),
                         transcation: transc,
                     };
@@ -335,12 +346,14 @@ impl Context {
                         mempool_locked.deque.len()
                     );
                     let signed_tx_hash: H256 = signed_tx.hash();
+
                     // broadcast new signedtx inserted
                     // println!("new_transaction hash");
                     self.server
                         .broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
+                    // self.server
+                    //     .broadcast(Message::Transactions(vec![signed_tx]));
                     println!("broadcast txs");
-                    // used_tx.insert(&val);
                     used_tx.insert(val.clone());
                 }
             }

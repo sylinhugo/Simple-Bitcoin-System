@@ -5,14 +5,14 @@ use crate::blockchain::Blockchain;
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
 use crate::types::transaction::{verify, SignedTransaction, State, StatePerBlock};
-use std::collections::HashMap;
 use ring::digest::{self};
+use std::collections::HashMap;
 // use futures::executor::block_on;
 // use futures::lock;
 use log::{debug, error, warn};
 // use ring::signature;
 use std::sync::{Arc, Mutex};
-use std::{thread};
+use std::thread;
 
 #[cfg(any(test, test_utilities))]
 use super::peer::TestReceiver as PeerTestReceiver;
@@ -23,7 +23,7 @@ pub struct Worker {
     msg_chan: smol::channel::Receiver<(Vec<u8>, peer::Handle)>,
     num_worker: usize,
     server: ServerHandle,
-    blockchain: Arc<Mutex<Blockchain>>,       // proj3 added
+    blockchain: Arc<Mutex<Blockchain>>, // proj3 added
     // buffer: Arc<Mutex<HashMap<H256, Block>>>, // proj3 added
     orphan_buffer: Arc<Mutex<HashMap<H256, Block>>>,
     state_per_block: Arc<Mutex<StatePerBlock>>,
@@ -112,19 +112,20 @@ impl Worker {
                 Message::Blocks(blocks) => {
                     let mut new_block_hashes: Vec<H256> = Vec::new();
                     let mut unseen: Vec<H256> = Vec::new();
-                    
-                    for block in blocks.iter() {
 
+                    for block in blocks.iter() {
                         // judge if the block already exists in the block chain
                         let locked_state_per_block = self.state_per_block.lock().unwrap();
                         for tx in &block.content.content {
-                            if !transaction_check(&locked_state_per_block.state_block_map[&locked_blockchian.tip], &tx){
+                            if !transaction_check(
+                                &locked_state_per_block.state_block_map[&locked_blockchian.tip],
+                                &tx,
+                            ) {
                                 continue;
                             }
                         }
-                        
-                        drop(locked_state_per_block);
 
+                        drop(locked_state_per_block);
 
                         if locked_blockchian.blocks.contains_key(&block.hash()) {
                             continue;
@@ -280,7 +281,6 @@ impl Worker {
                     let mut transactions_new = Vec::new();
 
                     for tx in &signedtransactions {
-                       
                         let t_hash = tx.hash();
                         let public_key_tx = &tx.public_key;
                         let signature_tx = &tx.signature;
@@ -288,7 +288,10 @@ impl Worker {
 
                         // verify with the publickey
                         let locked_state_per_block = self.state_per_block.lock().unwrap();
-                        if !transaction_check(&locked_state_per_block.state_block_map[&locked_blockchian.tip], &tx){
+                        if !transaction_check(
+                            &locked_state_per_block.state_block_map[&locked_blockchian.tip],
+                            &tx,
+                        ) {
                             continue;
                         }
                         drop(locked_state_per_block);
@@ -319,13 +322,12 @@ impl Worker {
             // drop(locked_orphan_buffer);
         }
     }
-    
 }
 
 // fn is_blck_valid(block: &Block, parent_state: &State) -> bool {
 //     for signed_tx in &block.content.content {
 //         debug!("current signed_tx {:?}", signed_tx);
-  
+
 //          //Couple of checks
 //          //1. Owner match
 //          //2. Input/Output total match
@@ -335,13 +337,13 @@ impl Worker {
 //          raw_address.copy_from_slice(&(public_key_hash.as_ref()[12..32]));
 //          let owner_address:address::Address = (raw_address).into();
 //         //  let owner_address = address::address_from_public_key_vec_ref(&signed_tx.public_key);
-         
+
 //          let mut total_input_value = 0;
 //          for input in &signed_tx.transcation.input {
 //              debug!("current tx_input {:?}", input);
 //              if !parent_state.state_map.contains_key(&input){
 //                 debug!("tx is double spend as input is not there in State!");
-//                 return false;  
+//                 return false;
 //              }
 //              let output = &parent_state.state_map[&input];
 //              if output.receipient_address != owner_address {
@@ -352,12 +354,12 @@ impl Worker {
 //              }
 //              total_input_value = output.value;
 //          }
-         
+
 //          let mut total_output_value = 0;
 //          for output in &signed_tx.transcation.output {
 //               total_output_value += output.value;
 //          }
-  
+
 //         //  if total_input_value != total_output_value {
 //         //     debug!("Input sum didn't match to output sum for tx");
 //         //     return false;
@@ -366,27 +368,26 @@ impl Worker {
 //       true
 // }
 
-pub fn transaction_check(state: &State, signed_tx: &SignedTransaction)->bool{
-
+pub fn transaction_check(state: &State, signed_tx: &SignedTransaction) -> bool {
     //validate signature
     if !verify(
-        &signed_tx.transcation, 
-        &signed_tx.public_key, 
-        &signed_tx.signature){
-            return false;
-        }
+        &signed_tx.transcation,
+        &signed_tx.public_key,
+        &signed_tx.signature,
+    ) {
+        return false;
+    }
 
     //consistent owner
     let mut total_avail_amount = 0;
     for utxo_input in &signed_tx.transcation.input {
-      
         // check the utxo input matches the current address
         // calculate the total input amount
         if state.state_map.contains_key(&utxo_input) {
             let prev_tx_output = &state.state_map[utxo_input];
             let transfer_amount = prev_tx_output.value;
             let prev_recipient_addr = prev_tx_output.receipient_address;
-            
+
             total_avail_amount += transfer_amount;
 
             let public_key_hash = digest::digest(&digest::SHA256, signed_tx.public_key.as_ref());
@@ -394,24 +395,22 @@ pub fn transaction_check(state: &State, signed_tx: &SignedTransaction)->bool{
             tmp_address.copy_from_slice(&(public_key_hash.as_ref()[0..20]));
             let receiver_address = (tmp_address).into();
 
-            
             if prev_recipient_addr != receiver_address {
                 return false;
             }
-        }
-        else {
+        } else {
             return false;
         }
     }
 
-    // Check double spending 
-    if state.double_spending_check(signed_tx.clone()){
+    // Check double spending
+    if state.double_spending_check(signed_tx.clone()) {
         return false;
     }
 
     // check the input amount matches the output amount
     let mut total_transfer_amount = 0;
-    for utxo_out in &signed_tx.transcation.output{
+    for utxo_out in &signed_tx.transcation.output {
         total_transfer_amount += utxo_out.value;
     }
     // >= or !=

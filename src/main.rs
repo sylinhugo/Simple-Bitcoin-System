@@ -53,11 +53,11 @@ fn main() {
     let peer_address = p2p_addr.to_string();
     println!("The ip address of current node is: {:?}", peer_address);
     let local_addr = peer_address.clone()[10..14].to_string();
-    println!("The port address is: {:?}", local_addr);
+    // println!("The port address is: {:?}", local_addr.clone());
 
     let blockchain = Blockchain::new();
     let mut _states_p_b = StatePerBlock::new();
-    _states_p_b.initial_coin_offering(blockchain.tip, local_addr);
+    _states_p_b.initial_coin_offering(blockchain.tip, local_addr.clone());
 
     let blockchain = Arc::new(Mutex::new(blockchain));
 
@@ -110,7 +110,7 @@ fn main() {
 
     // responsible for generate random transactions
     let (txs_generator_ctx, txs_generator) =
-        transaction_generate::new(&server, &blockchain, &state_per_block);
+        transaction_generate::new(&server, &blockchain, &state_per_block, local_addr);
     txs_generator_ctx.start();
 
     // start the miner
