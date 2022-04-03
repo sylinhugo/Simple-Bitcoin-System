@@ -56,8 +56,10 @@ fn main() {
     // println!("The port address is: {:?}", local_addr.clone());
 
     let blockchain = Blockchain::new();
+    println!("blockchain tip{:}", blockchain.tip.clone());
+
     let mut _states_p_b = StatePerBlock::new();
-    _states_p_b.initial_coin_offering(blockchain.tip, local_addr.clone());
+    _states_p_b.initial_coin_offering(blockchain.tip.clone(), local_addr.clone());
 
     let blockchain = Arc::new(Mutex::new(blockchain));
 

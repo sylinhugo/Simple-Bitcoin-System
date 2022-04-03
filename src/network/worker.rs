@@ -289,7 +289,7 @@ impl Worker {
                         // verify with the publickey
                         let locked_state_per_block = self.state_per_block.lock().unwrap();
                         if !transaction_check(
-                            &locked_state_per_block.state_block_map[&locked_blockchian.tip],
+                            &locked_state_per_block.state_block_map[&locked_blockchian.tip.clone()],
                             &tx,
                         ) {
                             continue;

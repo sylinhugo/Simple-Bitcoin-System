@@ -235,6 +235,10 @@ impl Context {
             if let OperatingState::ShutDown = self.operating_state {
                 return;
             }
+            // let mut addr_local: u16 = self.local_addr.clone().parse().unwrap();
+            // if (addr_local == 6001 || addr_local == 6002) {
+            //     continue;
+            // }
             let blockchain_mtx = self.blockchain.lock().unwrap();
             let mut mempool_locked = blockchain_mtx.mempool.lock().unwrap();
             let locked_state_per_block = self.state_per_block.lock().unwrap();
@@ -273,8 +277,10 @@ impl Context {
 
             // get to the newest state to avoid state
             let mut aval_amount = 0;
-            let newest_state = &locked_state_per_block.state_block_map[&blockchain_mtx.tip()];
+            let newest_state =
+                locked_state_per_block.state_block_map[&blockchain_mtx.tip().clone()].clone();
 
+            drop(locked_state_per_block);
             for key in newest_state.state_map.keys() {
                 // get the transfer receiver addr
 

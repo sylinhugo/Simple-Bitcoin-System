@@ -171,7 +171,7 @@ impl Context {
 
             let blockchain = self.blockchain.lock().unwrap();
             let mut state_per_block = self.state_per_block.lock().unwrap();
-            let mut state_newest = state_per_block.state_block_map[&blockchain.tip].clone();
+            let mut state_newest = state_per_block.state_block_map[&blockchain.tip.clone()].clone();
 
             // let mut block_parent = blockchain2.tip();    // Uncomment this, due to test case error
             let block_parent = self.tip;
@@ -231,7 +231,7 @@ impl Context {
                 state_per_block
                     .state_block_map
                     .insert(new_block.hash(), state_newest);
-
+                drop(state_per_block);
                 self.finished_block_chan
                     .send(new_block.clone())
                     .expect("Send finished block error");

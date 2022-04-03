@@ -148,9 +148,9 @@ impl Server {
                             respond_result!(req, true, "ok");
                         }
                         "/blockchain/longest-chain" => {
-                            println!{"visiting api longest-chain"}
+                            println! {"visiting api longest-chain"}
                             let blockchain = blockchain.lock().unwrap();
-                            
+
                             let v = blockchain.all_blocks_in_longest_chain();
                             let v_string: Vec<String> =
                                 v.into_iter().map(|h| h.to_string()).collect();
@@ -207,6 +207,7 @@ impl Server {
                                     return;
                                 }
                             };
+
                             // here we get the number of block
                             let mut cur_block_hash = blockchain_mtx.tip();
                             let mut cur_block = &blockchain_mtx.blocks[&cur_block_hash];
@@ -218,7 +219,8 @@ impl Server {
                                 cur_block_hash = cur_block.header.parent;
                             }
                             // get the state according to the block seq num
-                            let block_state = locked_state_per_block.state_block_map[&cur_block_hash].clone();
+                            let block_state =
+                                locked_state_per_block.state_block_map[&cur_block_hash].clone();
                             let mut res = Vec::new();
                             for key in block_state.state_map.keys() {
                                 let mut tmp = Vec::new();
@@ -228,11 +230,18 @@ impl Server {
                                 let index_s = key.index.to_string();
                                 let value_s = value.value.to_string();
                                 let recipient_s = value.receipient_address.to_string();
-                                let tuple_res = prev_tx_hash_s + " " + &index_s + " " + &value_s + " " + &recipient_s;
+                                let tuple_res = prev_tx_hash_s
+                                    + " "
+                                    + &index_s
+                                    + " "
+                                    + &value_s
+                                    + " "
+                                    + &recipient_s;
                                 tmp.push(tuple_res);
                                 res.push(tmp);
                             }
-                            
+                            res.sort();
+
                             respond_json!(req, res);
                         }
                         _ => {

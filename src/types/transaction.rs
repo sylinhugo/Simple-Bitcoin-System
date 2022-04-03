@@ -246,68 +246,6 @@ impl Mempool {
     }
 }
 
-// pub struct AddressBook {
-//     pub addresses: HashSet<Address>,
-//     pub addresses_vec: Vec<Address>,
-//     pub my_identity: Ed25519KeyPair,
-//     pub my_address: Address,
-// }
-// impl AddressBook {
-//     pub fn new() -> Self {
-//         let key: Ed25519KeyPair = key_pair::random();
-//         let pub_key = key.public_key();
-//         let pub_key_hash: H256 = digest::digest(&digest::SHA256, pub_key.as_ref()).into();
-//         // let address: Address = &(pub_key_hash.as_ref()[0..20]).into();
-//         let mut tmp_address1 = [0u8; 20];
-//         tmp_address1.copy_from_slice(&(pub_key_hash.as_ref()[0..20]));
-//         let address: Address = (tmp_address1).into();
-
-//         AddressBook {
-//             addresses: HashSet::new(),
-//             addresses_vec: Vec::new(),
-//             my_identity: key,
-//             my_address: address,
-//         }
-//     }
-//     pub fn insert_addr(&mut self, new_address: Address) {
-//         if !self.addresses.contains(&new_address) && new_address != self.my_address {
-//             self.addresses.insert(new_address);
-//             self.addresses_vec.push(new_address);
-//         }
-//     }
-//     pub fn get_my_address(&self) -> &Address {
-//         &self.my_address
-//     }
-// }
-
-pub struct AddressBook {
-    pub addresses: HashSet<Address>,
-    pub addresses_vec: Vec<Address>,
-    pub my_identity: Ed25519KeyPair,
-    pub my_address: Address,
-    pub port: u32,
-}
-impl AddressBook {
-    pub fn new(key: Ed25519KeyPair, address: Address, port: u32) -> Self {
-        AddressBook {
-            addresses: HashSet::new(),
-            addresses_vec: Vec::new(),
-            my_identity: key,
-            my_address: address,
-            port: port,
-        }
-    }
-    pub fn insert_addr(&mut self, new_address: Address) {
-        if !self.addresses.contains(&new_address) && new_address != self.my_address {
-            self.addresses.insert(new_address);
-            self.addresses_vec.push(new_address);
-        }
-    }
-    pub fn get_my_address(&self) -> &Address {
-        &self.my_address
-    }
-}
-
 // According to Midterm1, impl Hashable for SignedTranscation
 impl Hashable for SignedTransaction {
     fn hash(&self) -> H256 {
