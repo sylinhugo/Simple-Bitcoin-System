@@ -3,7 +3,7 @@ extern crate ring;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 // Add ring crate
-use ring::digest::{self, Context, Digest, SHA256};
+use ring::digest::{self};
 
 // 20-byte address
 #[derive(Eq, PartialEq, Serialize, Deserialize, Clone, Hash, Default, Copy)]

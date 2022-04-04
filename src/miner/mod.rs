@@ -183,7 +183,7 @@ impl Context {
             // adjust the difficulty to modify mining speed
             let mut tmp_difficulty = [255u8; 32];
             tmp_difficulty[0] = 0u8;
-            tmp_difficulty[1] = 0u8;
+            tmp_difficulty[1] = 15u8;
             // tmp_difficulty[2] = 63u8;
             let block_difficulty = tmp_difficulty.into();
 
@@ -238,7 +238,7 @@ impl Context {
 
                 // block_parent = new_block.hash();     // this will not work, failed to pass miner_three_block() case
                 self.tip = new_block.hash();
-                print!("mining a new block is {}", 1);
+                // print!("mining a new block is {}", 1);
             }
             // print!("test for mining a new block");
             if let OperatingState::Run(i) = self.operating_state {

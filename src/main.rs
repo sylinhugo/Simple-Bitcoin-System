@@ -51,12 +51,12 @@ fn main() {
         });
 
     let peer_address = p2p_addr.to_string();
-    println!("The ip address of current node is: {:?}", peer_address);
+    // println!("The ip address of current node is: {:?}", peer_address);
     let local_addr = peer_address.clone()[10..14].to_string();
     // println!("The port address is: {:?}", local_addr.clone());
 
     let blockchain = Blockchain::new();
-    println!("blockchain tip{:}", blockchain.tip.clone());
+    // println!("blockchain tip{:}", blockchain.tip.clone());
 
     let mut _states_p_b = StatePerBlock::new();
     _states_p_b.initial_coin_offering(blockchain.tip.clone(), local_addr.clone());

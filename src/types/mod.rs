@@ -5,3 +5,4 @@ pub mod key_pair;
 pub mod merkle;
 pub mod transaction;
 pub mod transaction_generate;
+pub mod addressbook;

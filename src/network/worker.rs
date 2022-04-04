@@ -141,7 +141,7 @@ impl Worker {
                         else {
                             let mut tmp_difficulty = [255u8; 32];
                             tmp_difficulty[0] = 0u8;
-                            tmp_difficulty[1] = 0u8;
+                            tmp_difficulty[1] = 15u8;
                             // tmp_difficulty[2] = 63u8;
                             let root_diff: H256 = tmp_difficulty.into();
                             // let root_diff  = locked_blockchian.blocks[&block.header.parent].header.difficulty;
@@ -241,7 +241,7 @@ impl Worker {
                     // }
                 }
                 Message::NewTransactionHashes(hashes) => {
-                    println!("receive req new txs");
+                    // println!("receive req new txs");
                     let mempool_mutex = locked_blockchian.mempool.lock().unwrap();
                     // vector to store transaction not included in mempool
                     let mut transactions_new = Vec::new();
@@ -257,7 +257,7 @@ impl Worker {
                     // drop(mempool_mutex);
                 }
                 Message::GetTransactions(hashes) => {
-                    println!("receive req get txs");
+                    // println!("receive req get txs");
                     let mempool_mutex = locked_blockchian.mempool.lock().unwrap();
                     // vector to store requested blocks
                     let mut transactions = Vec::new();
@@ -275,7 +275,7 @@ impl Worker {
                     // drop(mempool_mutex);
                 }
                 Message::Transactions(signedtransactions) => {
-                    println!("receive req txs");
+                    // println!("receive req txs");
                     let mut mempool_mutex = locked_blockchian.mempool.lock().unwrap();
 
                     let mut transactions_new = Vec::new();

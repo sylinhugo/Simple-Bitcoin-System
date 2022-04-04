@@ -9,19 +9,17 @@ use crate::types::hash::{Hashable, H256};
 use crate::types::transaction::{sign, SignedTransaction, Transaction, UTXO_input, UTXO_output};
 use crossbeam::channel::{unbounded, Receiver, Sender, TryRecvError};
 // use futures::AsyncWriteExt;
-use log::{debug, info, warn};
+use log::{info};
 // use rand::seq::{SliceRandom, index};
 use rand::Rng;
-use ring::signature::{
-    self, Ed25519KeyPair, EdDSAParameters, KeyPair, Signature, VerificationAlgorithm,
-};
-use ring::{digest, rand::SystemRandom};
+use ring::signature::{Ed25519KeyPair, KeyPair,};
+use ring::{digest};
 // use std::ptr::null;
-use crate::types::{address, key_pair};
+// use crate::types::{address, key_pair};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
-use std::{convert::TryInto, ops::Add};
+use std::{convert::TryInto};
 
 // enum class that supports message in channel
 enum ControlSignal {
@@ -102,7 +100,7 @@ impl Context {
     }
 
     fn generator_loop(&mut self) {
-        let mut addr_index: u16 = 0;
+        let addr_index: u16 = 0;
         // let mut addr_index: u16 = self.local_addr.clone().parse().unwrap();
 
         // let rngg = SystemRandom::new();
@@ -169,7 +167,7 @@ impl Context {
         let mut tmp_address1 = [0u8; 20];
         tmp_address1.copy_from_slice(&(public_key_hash1.as_ref()[0..20]));
         let addr3: Address = (tmp_address1).into();
-        println!("get 3 address");
+        // println!("get 3 address");
 
         let mut local_key = &key1;
         if addr_index == 6001 {
@@ -185,7 +183,7 @@ impl Context {
         } else if addr_index == 6002 {
             local_addr = addr3;
         }
-        println!("local_addr   {:?}", local_addr);
+        // println!("local_addr   {:?}", local_addr);
 
         loop {
             // print!("matching state");
@@ -200,7 +198,7 @@ impl Context {
                         }
                         ControlSignal::Start(i, j) => {
                             // info!("Generator starting in continuous mode with theta {}", i);
-                            addr_index = j;
+                            // addr_index = j;
                             self.operating_state = OperatingState::Run(i, j);
                         }
                         ControlSignal::Update => {
@@ -263,14 +261,14 @@ impl Context {
                 rand_recip_addr = addr3;
             }
 
-            println!("rand_recip_addr is: {:?}", rand_recip_addr);
-            println!(
-                "Generate a transaction, size of mempool {}",
-                mempool_locked.deque.len()
-            );
+            // println!("rand_recip_addr is: {:?}", rand_recip_addr);
+            // println!(
+            //     "Generate a transaction, size of mempool {}",
+            //     mempool_locked.deque.len()
+            // );
             // println!("add   s{:?}", rand_recip_addr);
 
-            for i in 0..20 {
+            for _i in 0..20 {
                 sender.push(rng.gen());
                 receiver.push(rng.gen());
             }
@@ -288,7 +286,7 @@ impl Context {
                 if used_tx.contains(&val) {
                     continue;
                 }
-                println!("avaible utxo input here");
+                // println!("avaible utxo input here");
 
                 let prev_tx_receiver = val.receipient_address;
 
@@ -296,21 +294,21 @@ impl Context {
                 if prev_tx_receiver == local_addr {
                     let mut sender = Vec::<u8>::with_capacity(20); // no use
                     let mut receiver = Vec::<u8>::with_capacity(20); // no use
-                    for i in 0..20 {
+                    for _i in 0..20 {
                         sender.push(rng.gen());
                         receiver.push(rng.gen());
                     }
 
                     aval_amount += val.value;
-                    println!("total available amount this utxo  {}", aval_amount);
+                    // println!("total available amount this utxo  {}", aval_amount);
                     // NOT SURE YET!!!!!!!!!!!!!!!!!!!
 
-                    let one_input_UTXO = UTXO_input {
+                    let one_input_utxo = UTXO_input {
                         prev_tx_hash: key.prev_tx_hash,
                         index: key.index,
                     };
                     let mut utxo_in_vec: Vec<UTXO_input> = Vec::new();
-                    utxo_in_vec.push(one_input_UTXO);
+                    utxo_in_vec.push(one_input_utxo);
 
                     // transfer all the amount to another
                     let utxo_out = UTXO_output {
@@ -343,14 +341,14 @@ impl Context {
                         transcation: transc,
                     };
 
-                    println!("get a txs");
+                    // println!("get a txs");
                     mempool_locked.insert(&signed_tx);
-                    println!("add txs into mempool");
+                    // println!("add txs into mempool");
 
-                    println!(
-                        "Generate a transaction, size of mempool {}",
-                        mempool_locked.deque.len()
-                    );
+                    // println!(
+                    //     "Generate a transaction, size of mempool {}",
+                    //     mempool_locked.deque.len()
+                    // );
                     let signed_tx_hash: H256 = signed_tx.hash();
 
                     // broadcast new signedtx inserted
@@ -359,7 +357,7 @@ impl Context {
                         .broadcast(Message::NewTransactionHashes(vec![signed_tx_hash]));
                     // self.server
                     //     .broadcast(Message::Transactions(vec![signed_tx]));
-                    println!("broadcast txs");
+                    // println!("broadcast txs");
                     used_tx.insert(val.clone());
                 }
             }

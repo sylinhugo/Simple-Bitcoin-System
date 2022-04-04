@@ -3,16 +3,14 @@ extern crate ring;
 use super::address::Address;
 use crate::types::block::Block;
 use crate::types::hash::{Hashable, H256};
-use crate::types::{address, key_pair};
-use rand::seq::index;
+// use crate::types::{address, key_pair};
+// use rand::seq::index;
 use rand::Rng;
-use ring::agreement::PublicKey;
-use ring::digest::{self, Context, Digest, SHA256};
-use ring::pkcs8::Document;
-use ring::rand::SystemRandom;
-use ring::signature::{
-    self, Ed25519KeyPair, EdDSAParameters, KeyPair, Signature, VerificationAlgorithm,
-};
+// use ring::agreement::PublicKey;
+use ring::digest::{self};
+// use ring::pkcs8::Document;
+// use ring::rand::SystemRandom;
+use ring::signature::{self, Ed25519KeyPair, KeyPair, Signature};
 use serde::{Deserialize, Serialize};
 use std::cmp;
 use std::collections::VecDeque;
@@ -73,11 +71,11 @@ impl State {
         let mut idx = 0;
         for transcation_output in transcation.output {
             let transcation_hash = signed_transaction.hash();
-            let UTXO_tmp = UTXO_input {
+            let utxo_tmp = UTXO_input {
                 prev_tx_hash: transcation_hash,
                 index: idx,
             };
-            self.state_map.insert(UTXO_tmp, transcation_output);
+            self.state_map.insert(utxo_tmp, transcation_output);
             idx += 1;
         }
     }
@@ -176,13 +174,13 @@ impl StatePerBlock {
         //     index: index,
         // };
 
-        let UTXO_intmp = UTXO_input {
+        let utxo_intmp = UTXO_input {
             prev_tx_hash: previous_output,
             index: index,
         };
 
         // let UTXO_outtmp = UTXO_output{value: value, receipient_address: fake_address};
-        ico_state.state_map.insert(UTXO_intmp, utxo_out_1);
+        ico_state.state_map.insert(utxo_intmp, utxo_out_1);
 
         self.state_block_map.insert(h, ico_state);
     }
@@ -218,7 +216,7 @@ impl Mempool {
         let t_hash = t.hash();
 
         // already exists
-        if (self.tx_map.contains_key(&t_hash)) {
+        if self.tx_map.contains_key(&t_hash) {
             return;
         }
         self.deque.push_back(t_hash);
@@ -236,7 +234,7 @@ impl Mempool {
 
     pub fn remove(&mut self, t: &SignedTransaction) {
         let t_hash = t.hash();
-        if (self.tx_map.contains_key(&t_hash)) {
+        if self.tx_map.contains_key(&t_hash) {
             self.tx_map.remove(&t_hash);
         }
     }
@@ -340,7 +338,7 @@ mod tests {
     use super::*;
     use crate::types::key_pair;
     use ring::signature::KeyPair;
-    use serde_json::to_vec;
+    // use serde_json::to_vec;
 
     #[test]
     fn sign_verify() {

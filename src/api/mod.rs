@@ -1,10 +1,11 @@
-use crate::blockchain::{self, Blockchain};
+use crate::blockchain::{Blockchain};
 use crate::miner::Handle as MinerHandle;
 use crate::network::message::Message;
 use crate::network::server::Handle as NetworkServerHandle;
 use crate::types::hash::Hashable;
 use crate::types::transaction::StatePerBlock;
 use crate::types::transaction_generate::Handle as TXGenerateHandle;
+use crate::types::addressbook::{AddressBook};
 use serde::Serialize;
 
 use log::info;
@@ -162,7 +163,7 @@ impl Server {
                             let mut res = Vec::new();
                             // get all txs of a single block
                             let mut i = 0;
-                            println!("visiting long chain tx");
+                            // println!("visiting long chain tx");
 
                             for block_hash in blockchain_mtx.all_blocks_in_longest_chain() {
                                 let block = blockchain_mtx.get(block_hash);
@@ -178,7 +179,7 @@ impl Server {
                                 res.push(tmp);
                             }
                             // drop(blockchain_mtx);
-                            println!("how many blocks in chain {}", i);
+                            // println!("how many blocks in chain {}", i);
                             respond_json!(req, res);
                             // respond_result!(req, true, "ok");
                         }
@@ -210,7 +211,7 @@ impl Server {
 
                             // here we get the number of block
                             let mut cur_block_hash = blockchain_mtx.tip();
-                            let mut cur_block = &blockchain_mtx.blocks[&cur_block_hash];
+                            let mut cur_block;
                             loop {
                                 if blockchain_mtx.lengths[&cur_block_hash] == block {
                                     break;
@@ -218,6 +219,12 @@ impl Server {
                                 cur_block = &blockchain_mtx.blocks[&cur_block_hash];
                                 cur_block_hash = cur_block.header.parent;
                             }
+                            // get the state according to the block seq num
+                            let mut addr_book = AddressBook::new();
+                            let res = addr_book.search(block);
+
+                            respond_json!(req, res);
+
                             // get the state according to the block seq num
                             let block_state =
                                 locked_state_per_block.state_block_map[&cur_block_hash].clone();
@@ -242,7 +249,6 @@ impl Server {
                             }
                             res.sort();
 
-                            respond_json!(req, res);
                         }
                         _ => {
                             let content_type =
