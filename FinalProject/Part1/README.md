@@ -23,5 +23,6 @@ TSLA / USD: 0xb31357d152638fd1ae0853d24b9Ea81dF29E3EF2
 ```
 1. There is only one function defined in the interface, you are required to implement it to provide the requested information. You can design other parts of the contract as you like.
 2. Deploy the price feed contract for each asset, test the interface and copy their addresses. Once the deployment transactions are confirmed, you are able to find them in [etherscan](https://kovan.etherscan.io/) with https://kovan.etherscan.io/address/{:your_tx_hash}.
+
 ## Submission
-Submit the transaction addresses of two contracts in this form: [https://forms.gle/zxA9zrKZSybxPqzP8](https://forms.gle/zxA9zrKZSybxPqzP8).
+Submit the addresses of two contracts (20 bytes value with 0x appended in front) in this form: [https://forms.gle/zxA9zrKZSybxPqzP8](https://forms.gle/zxA9zrKZSybxPqzP8). Once the contracts are deployed, you can copy the address from Remix - Deployed Contracts.
