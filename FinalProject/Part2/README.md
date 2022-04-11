@@ -72,5 +72,5 @@ Note: Do not change other files in `Part2`, the `PriceFeed.sol` provided here is
 
 
 ## Submission
-Upload the `Mint.sol` on compass2g. The grading will be conducted using truffle with more tests, including both valid and invalid operations (such as when the caller is not the owner of the position, withdrawal / mint that results in an under-collateralized CDP).
+Rename the `Mint.sol` to `netid1-netid2.sol` (sort netids in alphabetic order) and upload it on compass2g. Submission from one team member is sufficient. The grading will be conducted using truffle with more tests, including both valid and invalid operations (such as when the caller is not the owner of the position, withdrawal / mint that results in an under-collateralized CDP).
 
