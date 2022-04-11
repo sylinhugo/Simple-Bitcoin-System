@@ -46,7 +46,7 @@ The remaining functions are left for you to implement.
 * `deposit`: Add collateral amount of the position at the given index. Make sure the message sender owns the position and transfer deposited tokens from the sender to the contract.
 * `withdraw`: Withdraw collateral tokens from the position at the given index. Make sure the message sender owns the position and the collateral ratio won't go below the MCR. Transfer withdrawn tokens from the contract to the sender.
 * `mint`: Mint more asset tokens from the position at the given index. Make sure the message sender owns the position and the collateral ratio won't go below the MCR. 
-* `burn`: Contract burns all asset tokens in the position. Make sure the message sender owns the position.
+* `burn`: Contract burns the given amount of asset tokens in the position. Make sure the message sender owns the position.
 
 ## Testing
 
