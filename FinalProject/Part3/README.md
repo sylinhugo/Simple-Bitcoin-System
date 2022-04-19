@@ -61,6 +61,18 @@ Similar to Part 2, we will use Truffle to test smart contracts and Ganache to si
 2.  `cd Part3` and run `npm install` to install openzeppelin packages. 
 3. Replace the `Swap.sol` contract in the `contracts` folder with your implementation. Run `truffle test`.
 
+### Notes on decimals
+Due to the lack of floating-point numbers, Solidity arithmetic chops off the decimal portion of a number, which may cause the difference between your calculation and the results in the testing script even using the same formula. For example:
+
+```
+ To calculate 1000000 - 1000000 * 1000000 / (1000000 + 997) in solidity
+ The exact result is 996.00698
+ The expected result is 996
+ But if you put the above formula directly in solidity, the output is 997
+ Since it first calculates 1000000 * 1000000 / (1000000 + 997) which is 999003.993 but gets truncated to 999003
+```
+
+To avoid such rounding errors, you would need to be careful with the order of operations, such as multiplying or adding before dividing. Generally, it is a good idea to delay division until as late as possible.
 
 ## Submission
 Rename the `Swap.sol` to `netid1-netid2.sol` (sort netids in alphabetic order) and upload it on compass2g. Submission from one team member is sufficient. The grading will be conducted using truffle with more tests, including both valid and invalid operations (such as trade with an incorrect ratio of tokens, and withdrawal that exceeds share proportions).
