@@ -72,7 +72,9 @@ Due to the lack of floating-point numbers, Solidity arithmetic chops off the dec
  Since it first calculates 1000000 * 1000000 / (1000000 + 997) which is 999003.993 but gets truncated to 999003
 ```
 
-To avoid such rounding errors, you would need to be careful with the order of operations, such as multiplying or adding before dividing. Generally, it is a good idea to delay division until as late as possible.
+To avoid such rounding errors, you would need to be careful with the order of operations, such as multiplying or adding before dividing. **In testing we will allow a small rounding error (100 out of 10^8).** Generally, it is a good idea to delay division until as late as possible.
+
+
 
 ## Submission
 Rename the `Swap.sol` to `netid1-netid2.sol` (sort netids in alphabetic order) and upload it on compass2g. Submission from one team member is sufficient. The grading will be conducted using truffle with more tests, including both valid and invalid operations (such as trade with an incorrect ratio of tokens, and withdrawal that exceeds share proportions).

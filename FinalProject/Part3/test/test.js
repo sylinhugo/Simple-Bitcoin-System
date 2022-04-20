@@ -70,7 +70,7 @@ contract("Swap test", async accounts => {
 
         const tokenReceived = await instances['sTSLA'].balanceOf.call(accounts[1]);
 
-        assert(Math.abs(tokenReceived - 99600698103) < 1000000);
+        assert(Math.abs(tokenReceived - 99600698103) < 100);
         const reserves = await instances['Swap'].getReserves.call();
         assert.equal(reserves[0], 1000000 * 10 ** 8 + tokenSent);
         assert.equal(reserves[1], 1000000 * 10 ** 8 - tokenReceived);
@@ -91,7 +91,7 @@ contract("Swap test", async accounts => {
         await instances['Swap'].token1To0(tokenSent, { from: accounts[2] });
 
         const tokenReceived = await instances['sBNB'].balanceOf.call(accounts[2]);
-        assert(Math.abs(tokenReceived - 99799600897) < 1000000);
+        assert(Math.abs(tokenReceived - 99799600897) < 100);
         const reserves = await instances['Swap'].getReserves.call();
         assert(reserves[0].eq(reserves_before[0].sub(tokenReceived)));
         assert.equal(reserves[1], reserves_before[1].toNumber() + tokenSent);
