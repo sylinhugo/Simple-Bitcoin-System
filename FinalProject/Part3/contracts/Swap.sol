@@ -5,25 +5,35 @@ import "./interfaces/ISwap.sol";
 import "./sAsset.sol";
 
 contract Swap is Ownable, ISwap {
-
     address token0;
     address token1;
-    uint reserve0;
-    uint reserve1;
-    mapping (address => uint) shares;
-    uint public totalShares;
+    uint256 reserve0;
+    uint256 reserve1;
+    mapping(address => uint256) shares;
+    uint256 public totalShares;
 
     constructor(address addr0, address addr1) {
         token0 = addr0;
         token1 = addr1;
     }
 
-    function init(uint token0Amount, uint token1Amount) external override onlyOwner {
+    function init(uint256 token0Amount, uint256 token1Amount)
+        external
+        override
+        onlyOwner
+    {
         require(reserve0 == 0 && reserve1 == 0, "init - already has liquidity");
-        require(token0Amount > 0 && token1Amount > 0, "init - both tokens are needed");
-        
-        require(sAsset(token0).transferFrom(msg.sender, address(this), token0Amount));
-        require(sAsset(token1).transferFrom(msg.sender, address(this), token1Amount));
+        require(
+            token0Amount > 0 && token1Amount > 0,
+            "init - both tokens are needed"
+        );
+
+        require(
+            sAsset(token0).transferFrom(msg.sender, address(this), token0Amount)
+        );
+        require(
+            sAsset(token1).transferFrom(msg.sender, address(this), token1Amount)
+        );
         reserve0 = token0Amount;
         reserve1 = token1Amount;
         totalShares = sqrt(token0Amount * token1Amount);
@@ -31,10 +41,10 @@ contract Swap is Ownable, ISwap {
     }
 
     // https://github.com/Uniswap/v2-core/blob/v1.0.1/contracts/libraries/Math.sol
-    function sqrt(uint y) internal pure returns (uint z) {
+    function sqrt(uint256 y) internal pure returns (uint256 z) {
         if (y > 3) {
             z = y;
-            uint x = y / 2 + 1;
+            uint256 x = y / 2 + 1;
             while (x < z) {
                 z = x;
                 x = (y / x + x) / 2;
@@ -44,7 +54,7 @@ contract Swap is Ownable, ISwap {
         }
     }
 
-    function getReserves() external view returns (uint, uint) {
+    function getReserves() external view returns (uint256, uint256) {
         return (reserve0, reserve1);
     }
 
@@ -52,12 +62,17 @@ contract Swap is Ownable, ISwap {
         return (token0, token1);
     }
 
-    function getShares(address LP) external view returns (uint) {
+    function getShares(address LP) external view returns (uint256) {
         return shares[LP];
     }
 
     /* TODO: implement your functions here */
 
+    function addLiquidity(uint256 token0Amount) external override {}
 
-    
+    function removeLiquidity(uint256 withdrawShares) external override {}
+
+    function token0To1(uint256 token0Amount) external override {}
+
+    function token1To0(uint256 token1Amount) external override {}
 }
