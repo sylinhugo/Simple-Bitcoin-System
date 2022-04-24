@@ -68,11 +68,92 @@ contract Swap is Ownable, ISwap {
 
     /* TODO: implement your functions here */
 
-    function addLiquidity(uint256 token0Amount) external override {}
+    function addLiquidity(uint256 token0Amount) external override {
+        (uint256 _reserve0, uint256 _reserve1) = (reserve0, reserve1);
+        (address _token0, address _token1) = (token0, token1);
+        uint256 amount0;
+        uint256 amount1;
 
-    function removeLiquidity(uint256 withdrawShares) external override {}
+        amount0 = token0Amount;
+        amount1 = (_reserve1 * amount0) / _reserve0;
 
-    function token0To1(uint256 token0Amount) external override {}
+        require(
+            sAsset(_token0).transferFrom(msg.sender, address(this), amount0)
+        );
+        // require(sAsset(_token0).mint(msg.sender, amount0));
 
-    function token1To0(uint256 token1Amount) external override {}
+        require(
+            sAsset(_token1).transferFrom(msg.sender, address(this), amount1)
+        );
+        // require(sAsset(_token1).mint(msg.sender, amount1));
+
+        (_reserve0, _reserve1) = (_reserve0 + amount0, _reserve1 + amount1);
+
+        (reserve0, reserve1) = (_reserve0, _reserve1);
+        uint256 newShares = (totalShares * amount0) / reserve0;
+        shares[msg.sender] = newShares;
+    }
+
+    function removeLiquidity(uint256 withdrawShares) external override {
+        (uint256 _reserve0, uint256 _reserve1) = (reserve0, reserve1);
+        (address _token0, address _token1) = (token0, token1);
+        uint256 amount0;
+        uint256 amount1;
+
+        amount0 = (_reserve0 * withdrawShares) / totalShares;
+        amount1 = (_reserve1 * withdrawShares) / totalShares;
+
+        require(sAsset(_token0).transfer(address(this), amount0));
+        require(sAsset(_token1).transfer(address(this), amount1));
+
+        // require(sAsset(_token0).burn(msg.sender, amount0));
+        // require(sAsset(_token1).burn(msg.sender, amount1));
+
+        require(sAsset(_token0).transfer(msg.sender, amount0));
+        require(sAsset(_token1).transfer(msg.sender, amount1));
+
+        (_reserve0, _reserve1) = (_reserve0 - amount0, _reserve1 - amount1);
+
+        (reserve0, reserve1) = (_reserve0, _reserve1);
+        uint256 newShares = (totalShares * amount0) / reserve0;
+        shares[msg.sender] = newShares;
+    }
+
+    function token0To1(uint256 token0Amount) external override {
+        (uint256 _reserve0, uint256 _reserve1) = (reserve0, reserve1);
+        (address _token0, address _token1) = (token0, token1);
+
+        uint256 token0_sent = token0Amount;
+        uint256 protocol_fee = ((token0_sent * 3) / 100);
+        uint256 token0_to_exchange = token0_sent *
+            uint256(1 - uint256(3 / 1000));
+        uint256 invariant = _reserve0 * _reserve1;
+        uint256 token1_to_return = _reserve1 -
+            invariant /
+            uint256((_reserve1 + token0_to_exchange + 0.5));
+
+        (reserve0, reserve1) = (
+            _reserve0 + token0_sent,
+            _reserve1 - token1_to_return
+        );
+    }
+
+    function token1To0(uint256 token1Amount) external override {
+        (uint256 _reserve0, uint256 _reserve1) = (reserve0, reserve1);
+        (address _token0, address _token1) = (token0, token1);
+
+        uint256 token1_sent = token1Amount;
+        uint256 protocol_fee = ((token1_sent * 3) / 100);
+        uint256 token1_to_exchange = token1_sent *
+            uint256(1 - uint256(3 / 1000));
+        uint256 invariant = _reserve0 * _reserve1;
+        uint256 token0_to_return = _reserve0 -
+            invariant /
+            uint256((_reserve0 + token1_to_exchange));
+
+        (reserve0, reserve1) = (
+            _reserve0 - token0_to_return,
+            _reserve1 + token1_sent
+        );
+    }
 }
