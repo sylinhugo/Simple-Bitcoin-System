@@ -1,6 +1,6 @@
 # Part 4: Integrating your synthetic Dapp
 
-Welcome to the last part of this project! So far you have completed all the contracts in Solidity needed for your Dapp, the last step is to integrate them with a web client to complete the end product . At the end of this part, you will get your first comprehensive decentralized application. Don't forget to give it an awesome name and slogan!
+Welcome to the last part of this project! So far you have completed all the contracts in Solidity needed for your Dapp, the last step is to integrate them with a web client to complete the end product. At the end of this part, you will get your first comprehensive decentralized application. Don't forget to give it an awesome name and slogan!
 
 ## Contracts
 The first thing you need to do is to prepare all contracts in the `contracts/` directory. Recall you have implemented the following contracts:
@@ -59,6 +59,9 @@ Other functions such as `closePosition`, and `deposit / withdraw` are not requir
 2. `init` function has been implemented as an example showing how a function gets the inputs, calls functions in smart contracts, and writes the outputs back to the web client.
 3. You can change a cooler name and slogan of your app in `app/scr/index.html`. Remember not to modify other codes.
 4. For debugging, you can open the browser developer console to view any errors and warnings.
+
+## Submission
+Rename the `index.js` to `netid1-netid2.js` (sort netids in alphabetic order) and upload it on compass2g. Submission from one team member is sufficient. 
 
 ## Demo
 
